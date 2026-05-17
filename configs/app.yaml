@@ -1,0 +1,23 @@
+app:
+  name: Hermes Agent Software Team
+
+database:
+  path: data/app.db
+
+model:
+  defaults:
+    provider: openai-compatible
+    base_url: https://api.example.com/v1
+    api_key_env: DEFAULT_MODEL_API_KEY
+    model: claude-opus-4-7
+    temperature: 0.2
+    max_tokens: 8192
+    timeout_seconds: 300
+    max_retries: 2
+  agents:
+    architect:
+      model: claude-opus-4-7
+      timeout_seconds: 600
+    developer:
+      model: claude-opus-4-7
+      timeout_seconds: 1200

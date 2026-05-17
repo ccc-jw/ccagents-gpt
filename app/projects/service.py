@@ -86,3 +86,39 @@ def update_project_status(database_path: str, project_id: str, status: str, even
         )
     _record_event(database_path, project_id, event_type, reason)
     return get_project(database_path, project_id)
+
+
+def update_project_phase(
+    database_path: str,
+    project_id: str,
+    from_phase: str,
+    to_phase: str,
+    event_type: str,
+    reason: str,
+    evidence: list[str],
+):
+    now = _now()
+    with get_connection(database_path) as connection:
+        connection.execute(
+            "UPDATE projects SET current_phase = ?, updated_at = ? WHERE id = ?",
+            (to_phase, now, project_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO project_events (id, project_id, event_type, actor_type, actor_id, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"evt_{uuid4().hex}",
+                project_id,
+                event_type,
+                "system",
+                "workflow",
+                json.dumps(
+                    {"from_phase": from_phase, "to_phase": to_phase, "reason": reason, "evidence": evidence},
+                    ensure_ascii=False,
+                ),
+                now,
+            ),
+        )
+    return get_project(database_path, project_id)

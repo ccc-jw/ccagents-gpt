@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.core.database import get_connection
 from app.messaging.schemas import AgentMessageCreateRequest
+from app.projects import service as project_service
 
 
 def _now():
@@ -16,6 +17,18 @@ def _decode_message(row):
     data = dict(row)
     data["related_artifacts"] = json.loads(data.pop("related_artifacts_json") or "[]")
     return data
+
+
+def _message_event_payload(message):
+    return {
+        "message_id": message["id"],
+        "from_agent": message["from_agent"],
+        "to_agent": message["to_agent"],
+        "message_type": message["message_type"],
+        "phase": message["phase"],
+        "title": message["title"],
+        "status": message["status"],
+    }
 
 
 def create_message(database_path: str, project_id: str, request: AgentMessageCreateRequest):
@@ -44,7 +57,14 @@ def create_message(database_path: str, project_id: str, request: AgentMessageCre
                 now,
             ),
         )
-    return get_message(database_path, message_id)
+    message = get_message(database_path, message_id)
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "agent_message_created",
+        _message_event_payload(message),
+    )
+    return message
 
 
 def get_message(database_path: str, message_id: str):
@@ -87,4 +107,11 @@ def update_message_status(database_path: str, message_id: str, status: str):
             "UPDATE agent_messages SET status = ?, updated_at = ? WHERE id = ?",
             (status, now, message_id),
         )
-    return get_message(database_path, message_id)
+    message = get_message(database_path, message_id)
+    project_service.record_project_event(
+        database_path,
+        message["project_id"],
+        "agent_message_status_updated",
+        _message_event_payload(message),
+    )
+    return message

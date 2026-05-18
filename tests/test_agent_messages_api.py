@@ -90,3 +90,41 @@ def test_update_message_status():
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "resolved"
     assert detail.json()["data"]["status"] == "resolved"
+
+
+def test_create_agent_message_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = create_message(client, project_id)
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "agent_message_created"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["message_id"] == response.json()["data"]["id"]
+    assert payload["from_agent"] == "DEV"
+    assert payload["to_agent"] == "PDM"
+    assert payload["message_type"] == "requirement_question"
+    assert payload["phase"] == "DEVELOPMENT"
+    assert payload["title"] == "登录失败是否需要区分账号不存在和密码错误"
+    assert payload["status"] == "pending"
+
+
+def test_update_agent_message_status_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    message_id = create_message(client, project_id).json()["data"]["id"]
+
+    response = client.post(f"/api/agent-messages/{message_id}/status", json={"status": "resolved"})
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "agent_message_status_updated"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["message_id"] == message_id
+    assert payload["from_agent"] == "DEV"
+    assert payload["to_agent"] == "PDM"
+    assert payload["message_type"] == "requirement_question"
+    assert payload["phase"] == "DEVELOPMENT"
+    assert payload["status"] == "resolved"

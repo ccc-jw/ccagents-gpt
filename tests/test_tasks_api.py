@@ -263,3 +263,68 @@ def test_dispatch_pending_tasks_records_project_event():
     assert payload["workspace_strategy"] == "git_worktree"
     assert payload["dispatched"][0]["task_id"] == task_id
     assert payload["dispatched"][0]["task_run_id"] == response.json()["data"]["dispatched"][0]["task_run_id"]
+
+
+def test_create_task_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = create_task(client, project_id)
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_created"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["task_id"] == response.json()["data"]["id"]
+    assert payload["phase"] == "DEVELOPMENT"
+    assert payload["owner_agent"] == "DEV"
+    assert payload["title"] == "实现登录接口"
+    assert payload["status"] == "pending"
+
+
+def test_assign_task_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id).json()["data"]["id"]
+
+    response = client.post(f"/api/tasks/{task_id}/assign", json={"assigned_to": "DEV"})
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_assigned"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["task_id"] == task_id
+    assert payload["status"] == "assigned"
+    assert payload["assigned_to"] == "DEV"
+
+
+def test_start_retry_and_cancel_task_record_project_events():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id).json()["data"]["id"]
+
+    started = client.post(
+        f"/api/tasks/{task_id}/start",
+        json={"runner_type": "claude_code_cli", "workspace_strategy": "git_worktree"},
+    )
+    retried = client.post(f"/api/tasks/{task_id}/retry", json={"reason": "修复测试失败后重试"})
+    cancelled = client.post(f"/api/tasks/{task_id}/cancel", json={"reason": "项目已暂停"})
+
+    start_events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_started"}).json()["data"]
+    retry_events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_retried"}).json()["data"]
+    cancel_events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_cancelled"}).json()["data"]
+
+    assert started.status_code == 200
+    assert retried.status_code == 200
+    assert cancelled.status_code == 200
+    assert len(start_events) == 1
+    assert start_events[0]["payload"]["task_id"] == task_id
+    assert start_events[0]["payload"]["task_run_id"] == started.json()["data"]["task_run_id"]
+    assert start_events[0]["payload"]["status"] == "running"
+    assert len(retry_events) == 1
+    assert retry_events[0]["payload"]["task_id"] == task_id
+    assert retry_events[0]["payload"]["status"] == "pending"
+    assert retry_events[0]["payload"]["retry_count"] == 1
+    assert len(cancel_events) == 1
+    assert cancel_events[0]["payload"]["task_id"] == task_id
+    assert cancel_events[0]["payload"]["status"] == "cancelled"

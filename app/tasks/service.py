@@ -34,6 +34,18 @@ def _decode_task_run(row):
     return data
 
 
+def _task_event_payload(task):
+    return {
+        "task_id": task["id"],
+        "phase": task["phase"],
+        "owner_agent": task["owner_agent"],
+        "title": task["title"],
+        "status": task["status"],
+        "assigned_to": task["assigned_to"],
+        "retry_count": task["retry_count"],
+    }
+
+
 def create_task(database_path: str, project_id: str, request: TaskCreateRequest):
     task_id = f"task_{uuid4().hex}"
     now = _now()
@@ -62,7 +74,14 @@ def create_task(database_path: str, project_id: str, request: TaskCreateRequest)
                 now,
             ),
         )
-    return get_task(database_path, task_id)
+    task = get_task(database_path, task_id)
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "task_created",
+        _task_event_payload(task),
+    )
+    return task
 
 
 def get_task(database_path: str, task_id: str):
@@ -138,7 +157,14 @@ def assign_task(database_path: str, task_id: str, assigned_to: str):
             "UPDATE tasks SET status = 'assigned', assigned_to = ?, updated_at = ? WHERE id = ?",
             (assigned_to, now, task_id),
         )
-    return get_task(database_path, task_id)
+    task = get_task(database_path, task_id)
+    project_service.record_project_event(
+        database_path,
+        task["project_id"],
+        "task_assigned",
+        _task_event_payload(task),
+    )
+    return task
 
 
 def start_task(database_path: str, task_id: str, runner_type: str, workspace_strategy: str | None):
@@ -157,6 +183,17 @@ def start_task(database_path: str, task_id: str, runner_type: str, workspace_str
             """,
             (run_id, task_id, task["project_id"], task["owner_agent"], runner_type, workspace_strategy, now, now),
         )
+    project_service.record_project_event(
+        database_path,
+        task["project_id"],
+        "task_started",
+        {
+            **_task_event_payload(get_task(database_path, task_id)),
+            "task_run_id": run_id,
+            "runner_type": runner_type,
+            "workspace_strategy": workspace_strategy,
+        },
+    )
     return {"task_run_id": run_id, "status": "created"}
 
 
@@ -167,7 +204,14 @@ def retry_task(database_path: str, task_id: str):
             "UPDATE tasks SET status = 'pending', retry_count = retry_count + 1, updated_at = ? WHERE id = ?",
             (now, task_id),
         )
-    return get_task(database_path, task_id)
+    task = get_task(database_path, task_id)
+    project_service.record_project_event(
+        database_path,
+        task["project_id"],
+        "task_retried",
+        _task_event_payload(task),
+    )
+    return task
 
 
 def cancel_task(database_path: str, task_id: str):
@@ -177,4 +221,11 @@ def cancel_task(database_path: str, task_id: str):
             "UPDATE tasks SET status = 'cancelled', updated_at = ? WHERE id = ?",
             (now, task_id),
         )
-    return get_task(database_path, task_id)
+    task = get_task(database_path, task_id)
+    project_service.record_project_event(
+        database_path,
+        task["project_id"],
+        "task_cancelled",
+        _task_event_payload(task),
+    )
+    return task

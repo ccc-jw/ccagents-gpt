@@ -14,6 +14,14 @@ def _row_to_dict(row):
     return dict(row) if row else None
 
 
+def _decode_event(row):
+    if row is None:
+        return None
+    data = dict(row)
+    data["payload"] = json.loads(data.pop("payload_json") or "{}")
+    return data
+
+
 def _record_event(database_path: str, project_id: str, event_type: str, reason: str | None = None):
     with get_connection(database_path) as connection:
         connection.execute(
@@ -75,6 +83,18 @@ def get_project_status(database_path: str, project_id: str):
         "risks": [],
         "pending_user_actions": [],
     }
+
+
+def list_project_events(database_path: str, project_id: str, event_type: str | None):
+    sql = "SELECT * FROM project_events WHERE project_id = ?"
+    params = [project_id]
+    if event_type:
+        sql += " AND event_type = ?"
+        params.append(event_type)
+    sql += " ORDER BY created_at ASC"
+    with get_connection(database_path) as connection:
+        rows = connection.execute(sql, params).fetchall()
+    return [_decode_event(row) for row in rows]
 
 
 def update_project_status(database_path: str, project_id: str, status: str, event_type: str, reason: str):

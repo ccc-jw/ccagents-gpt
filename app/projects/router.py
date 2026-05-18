@@ -34,6 +34,11 @@ def get_project_status(project_id: str, request: Request):
     return success_response(service.get_project_status(_database_path(request), project_id))
 
 
+@router.get("/api/projects/{project_id}/events")
+def list_project_events(project_id: str, request: Request, event_type: str | None = None):
+    return success_response(service.list_project_events(_database_path(request), project_id, event_type))
+
+
 @router.post("/api/projects/{project_id}/pause")
 def pause_project(project_id: str, request_body: ProjectActionRequest, request: Request):
     return success_response(

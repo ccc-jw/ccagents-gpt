@@ -23,6 +23,20 @@ def post_event(client, text):
     )
 
 
+def create_project(client):
+    return client.post(
+        "/api/projects",
+        json={
+            "name": "用户登录功能",
+            "description": "实现账号密码登录、错误提示和权限校验",
+            "owner_user_id": "feishu_user_001",
+            "repo_url": "https://github.com/example/app",
+            "default_branch": "main",
+            "initial_requirement": "需要实现登录功能",
+        },
+    ).json()["data"]["id"]
+
+
 def test_receive_feishu_message_event_parses_status_command():
     client = make_client()
 
@@ -54,6 +68,27 @@ def test_receive_feishu_message_event_accepts_plain_text():
     assert data["text"] == "项目现在进展怎么样"
     assert data["command"] is None
     assert data["args"] == []
+
+
+def test_status_command_returns_project_status_summary():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = post_event(client, f"/status {project_id}")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["command"] == "status"
+    assert data["handled"] is True
+    assert data["project_status"] == {
+        "project_id": project_id,
+        "current_phase": "INIT",
+        "status": "active",
+        "progress_summary": "项目当前处于 INIT 阶段。",
+        "risks": [],
+        "pending_user_actions": [],
+    }
+    assert data["reply_text"] == "项目当前处于 INIT 阶段。"
 
 
 def test_parse_supported_feishu_slash_commands():

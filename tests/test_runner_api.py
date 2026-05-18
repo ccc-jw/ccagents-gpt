@@ -131,3 +131,64 @@ def test_cancel_runner_task_run_records_reason():
     assert data["status"] == "cancelled"
     assert data["summary"] == "用户暂停项目"
     assert data["result"] == {"reason": "用户暂停项目"}
+
+
+def test_get_runner_task_run_logs_returns_recorded_paths():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+    client.post(
+        f"/api/runner/task-runs/{task_run_id}/status",
+        json={
+            "status": "running_claude",
+            "logs_path": "/logs/run_001.log",
+            "stdout_path": "/logs/run_001.stdout.log",
+            "stderr_path": "/logs/run_001.stderr.log",
+            "diff_path": "/diffs/run_001.diff",
+            "summary": "Claude CLI running",
+            "result": {"phase": "running"},
+        },
+    )
+
+    response = client.get(f"/api/runner/task-runs/{task_run_id}/logs")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["task_run_id"] == task_run_id
+    assert data["status"] == "running_claude"
+    assert data["logs_path"] == "/logs/run_001.log"
+    assert data["stdout_path"] == "/logs/run_001.stdout.log"
+    assert data["stderr_path"] == "/logs/run_001.stderr.log"
+    assert data["diff_path"] == "/diffs/run_001.diff"
+    assert data["summary"] == "Claude CLI running"
+    assert data["result"] == {"phase": "running"}
+
+
+def test_get_runner_task_run_logs_returns_empty_metadata_before_status_update():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.get(f"/api/runner/task-runs/{task_run_id}/logs")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["task_run_id"] == task_run_id
+    assert data["status"] == "created"
+    assert data["logs_path"] is None
+    assert data["stdout_path"] is None
+    assert data["stderr_path"] is None
+    assert data["diff_path"] is None
+    assert data["summary"] is None
+    assert data["result"] is None
+
+
+def test_get_runner_task_run_logs_returns_none_for_missing_run():
+    client = make_client()
+
+    response = client.get("/api/runner/task-runs/run_missing/logs")
+
+    assert response.status_code == 200
+    assert response.json()["data"] is None

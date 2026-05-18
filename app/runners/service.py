@@ -91,3 +91,19 @@ def cancel_task_run(database_path: str, task_run_id: str, reason: str):
             (reason, json.dumps({"reason": reason}, ensure_ascii=False), now, task_run_id),
         )
     return get_task_run(database_path, task_run_id)
+
+
+def get_task_run_logs(database_path: str, task_run_id: str):
+    task_run = get_task_run(database_path, task_run_id)
+    if task_run is None:
+        return None
+    return {
+        "task_run_id": task_run["id"],
+        "status": task_run["status"],
+        "logs_path": task_run["logs_path"],
+        "stdout_path": task_run["stdout_path"],
+        "stderr_path": task_run["stderr_path"],
+        "diff_path": task_run["diff_path"],
+        "summary": task_run["summary"],
+        "result": task_run["result"],
+    }

@@ -21,6 +21,11 @@ def get_task_run(task_run_id: str, request: Request):
     return success_response(service.get_task_run(_database_path(request), task_run_id))
 
 
+@router.get("/api/runner/task-runs/{task_run_id}/logs")
+def get_task_run_logs(task_run_id: str, request: Request):
+    return success_response(service.get_task_run_logs(_database_path(request), task_run_id))
+
+
 @router.post("/api/runner/task-runs/{task_run_id}/status")
 def update_task_run_status(task_run_id: str, request_body: TaskRunStatusUpdateRequest, request: Request):
     return success_response(service.update_task_run_status(_database_path(request), task_run_id, request_body))

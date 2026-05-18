@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.agents.router import router as agents_router
 from app.artifacts.router import router as artifacts_router
+from app.automation.router import router as automation_router
 from app.core.database import init_db
 from app.core.responses import success_response
 from app.escalations.router import router as escalations_router
@@ -28,6 +29,7 @@ def create_app(database_path: str = "data/app.db", config_path: str | None = Non
     app.include_router(agents_router)
     app.include_router(projects_router)
     app.include_router(tasks_router)
+    app.include_router(automation_router)
     app.include_router(workflows_router)
     app.include_router(reviews_router)
     app.include_router(artifacts_router)

@@ -5,6 +5,7 @@ from uuid import uuid4
 from app.core.database import get_connection
 from app.projects import service as project_service
 from app.runners.schemas import TaskRunCreateRequest, TaskRunStatusUpdateRequest
+from app.tasks import service as task_service
 
 
 TASK_STATUS_BY_RUN_STATUS = {
@@ -139,6 +140,39 @@ def cancel_task_run(database_path: str, task_run_id: str, reason: str):
     task_run = get_task_run(database_path, task_run_id)
     _record_task_run_event(database_path, task_run)
     return task_run
+
+
+def get_task_run_execution_plan(database_path: str, task_run_id: str):
+    task_run = get_task_run(database_path, task_run_id)
+    if task_run is None:
+        return None
+    task = task_service.get_task(database_path, task_run["task_id"])
+    workspace_path = task_run["workspace_path"] or f"workspaces/{task_run_id}"
+    logs_path = task_run["logs_path"] or f"logs/{task_run_id}.log"
+    stdout_path = task_run["stdout_path"] or f"logs/{task_run_id}.stdout.log"
+    stderr_path = task_run["stderr_path"] or f"logs/{task_run_id}.stderr.log"
+    diff_path = task_run["diff_path"] or f"diffs/{task_run_id}.diff"
+    prompt = task["description"] if task else ""
+    return {
+        "task_run_id": task_run_id,
+        "runner_type": task_run["runner_type"],
+        "workspace_path": workspace_path,
+        "logs_path": logs_path,
+        "stdout_path": stdout_path,
+        "stderr_path": stderr_path,
+        "diff_path": diff_path,
+        "command": [
+            "claude",
+            "--print",
+            "--append-system-prompt",
+            (
+                f"Project ID: {task_run['project_id']}; Task ID: {task_run['task_id']}; "
+                f"Task Run ID: {task_run_id}; Agent: {task_run['agent_name']}"
+            ),
+            prompt,
+        ],
+        "env": {"ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"},
+    }
 
 
 def get_task_run_logs(database_path: str, task_run_id: str):

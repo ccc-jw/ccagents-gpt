@@ -312,3 +312,39 @@ def test_cancelled_runner_task_run_records_project_event():
     assert payload["summary"] == "用户暂停项目"
     assert payload["error_type"] is None
     assert payload["error_message"] is None
+
+
+def test_get_runner_task_run_execution_plan_returns_cli_command_and_paths():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.get(f"/api/runner/task-runs/{task_run_id}/execution-plan")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["task_run_id"] == task_run_id
+    assert data["runner_type"] == "claude_code_cli"
+    assert data["workspace_path"].endswith(f"workspaces/{task_run_id}")
+    assert data["logs_path"].endswith(f"logs/{task_run_id}.log")
+    assert data["stdout_path"].endswith(f"logs/{task_run_id}.stdout.log")
+    assert data["stderr_path"].endswith(f"logs/{task_run_id}.stderr.log")
+    assert data["diff_path"].endswith(f"diffs/{task_run_id}.diff")
+    assert data["command"] == [
+        "claude",
+        "--print",
+        "--append-system-prompt",
+        f"Project ID: {project_id}; Task ID: {task_id}; Task Run ID: {task_run_id}; Agent: DEV",
+        "登记 task_run 元数据",
+    ]
+    assert data["env"] == {"ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"}
+
+
+def test_get_runner_task_run_execution_plan_returns_none_for_missing_run():
+    client = make_client()
+
+    response = client.get("/api/runner/task-runs/run_missing/execution-plan")
+
+    assert response.status_code == 200
+    assert response.json()["data"] is None

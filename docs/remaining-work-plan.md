@@ -11,12 +11,13 @@
 - Project / Task / Agent / Review / Workflow / Escalation / Issue / Artifact / Agent Message / Runner API。
 - Review gate evaluation 与 workflow 阶段推进。
 - Project event timeline 与项目状态聚合。
-- Feishu inbound command、interactive escalation decision、notification payload、webhook send endpoint。
+- Feishu inbound command、interactive escalation decision、notification payload、webhook send endpoint、notification 审计。
 - Task 批量 dispatch、单任务 dispatch-next。
-- Runner execution-plan。
+- Runner execution-plan 与 runner execute API。
 - Automation tick：单步调度 pending task 并返回 execution plan。
+- Worker tick：扫描 active project 并自动推进一个 pending task。
 
-最新全量测试：`114 passed`。
+最新全量测试：`124 passed`。
 
 ## 执行原则
 
@@ -26,7 +27,7 @@
 - 不真实调用外部服务，除非测试中 mock。
 - 不写入 API key 或 webhook secret 到日志、事件或响应。
 
-## 阶段 1：真实 Runner 执行器 MVP
+## 阶段 1：真实 Runner 执行器 MVP（已完成）
 
 ### 目标
 
@@ -59,7 +60,7 @@
 .venv/bin/python -m pytest -q
 ```
 
-## 阶段 2：后台 Worker / Scheduler MVP
+## 阶段 2：后台 Worker / Scheduler MVP（已完成）
 
 ### 目标
 
@@ -93,7 +94,7 @@
 .venv/bin/python -m pytest -q
 ```
 
-## 阶段 3：Feishu 通知触发与审计 MVP
+## 阶段 3：Feishu 通知触发与审计 MVP（已完成）
 
 ### 目标
 
@@ -126,7 +127,7 @@
 .venv/bin/python -m pytest -q
 ```
 
-## 阶段 4：部署与 smoke 收尾
+## 阶段 4：部署与 smoke 收尾（已完成）
 
 ### 目标
 

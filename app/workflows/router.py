@@ -24,6 +24,14 @@ def advance_workflow(project_id: str, request_body: WorkflowTransitionRequest, r
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/api/projects/{project_id}/workflow/transition")
+def transition_workflow(project_id: str, request_body: WorkflowTransitionRequest, request: Request):
+    try:
+        return success_response(service.transition_workflow(_database_path(request), project_id, request_body))
+    except service.WorkflowError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/api/projects/{project_id}/workflow/reject")
 def reject_workflow(project_id: str, request_body: WorkflowTransitionRequest, request: Request):
     try:

@@ -42,5 +42,9 @@ def advance_workflow(database_path: str, project_id: str, request: WorkflowTrans
     return _transition(database_path, project_id, request, "workflow_advanced")
 
 
+def transition_workflow(database_path: str, project_id: str, request: WorkflowTransitionRequest):
+    return _transition(database_path, project_id, request, "workflow_transitioned")
+
+
 def reject_workflow(database_path: str, project_id: str, request: WorkflowTransitionRequest):
     return _transition(database_path, project_id, request, "workflow_rejected")

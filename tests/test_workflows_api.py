@@ -112,3 +112,29 @@ def test_reject_workflow_rejects_invalid_target():
     )
 
     assert response.status_code == 400
+
+
+def test_transition_workflow_updates_phase_with_generic_endpoint():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = client.post(
+        f"/api/projects/{project_id}/workflow/transition",
+        json={
+            "from_phase": "INIT",
+            "to_phase": "REQUIREMENT_DISCUSSION",
+            "reason": "开始需求沟通",
+            "evidence": ["msg_001"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["current_phase"] == "REQUIREMENT_DISCUSSION"
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "workflow_transitioned"})
+    assert events.json()["data"][0]["payload"] == {
+        "from_phase": "INIT",
+        "to_phase": "REQUIREMENT_DISCUSSION",
+        "reason": "开始需求沟通",
+        "evidence": ["msg_001"],
+    }

@@ -1,3 +1,5 @@
+from app.escalations import service as escalation_service
+from app.escalations.schemas import EscalationDecisionRequest
 from app.feishu.schemas import FeishuEventRequest, FeishuInteractiveRequest
 from app.projects import service as project_service
 
@@ -64,8 +66,8 @@ def handle_event(database_path: str, request: FeishuEventRequest):
     return response
 
 
-def handle_interactive(request: FeishuInteractiveRequest):
-    return {
+def handle_interactive(database_path: str, request: FeishuInteractiveRequest):
+    response = {
         "accepted": True,
         "source": "feishu",
         "action": request.action,
@@ -73,4 +75,16 @@ def handle_interactive(request: FeishuInteractiveRequest):
         "project_id": request.project_id,
         "escalation_id": request.escalation_id,
         "value": request.value,
+        "handled": False,
     }
+    if request.action == "escalation_decision" and request.escalation_id:
+        decision = request.value.get("decision")
+        comment = request.value.get("comment")
+        if decision:
+            response["escalation"] = escalation_service.decide_escalation(
+                database_path,
+                request.escalation_id,
+                EscalationDecisionRequest(decision=decision, comment=comment),
+            )
+            response["handled"] = True
+    return response

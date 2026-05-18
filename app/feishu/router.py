@@ -17,5 +17,5 @@ def receive_event(request_body: FeishuEventRequest, request: Request):
 
 
 @router.post("/api/feishu/interactive")
-def receive_interactive(request_body: FeishuInteractiveRequest):
-    return success_response(service.handle_interactive(request_body))
+def receive_interactive(request_body: FeishuInteractiveRequest, request: Request):
+    return success_response(service.handle_interactive(_database_path(request), request_body))

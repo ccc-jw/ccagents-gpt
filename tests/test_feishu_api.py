@@ -37,6 +37,22 @@ def create_project(client):
     ).json()["data"]["id"]
 
 
+def create_escalation(client, project_id):
+    return client.post(
+        f"/api/projects/{project_id}/escalations",
+        json={
+            "type": "issue_retry_threshold",
+            "phase": "TEST_AND_SECURITY_VALIDATION",
+            "source_agent": "PM",
+            "target_user_id": "feishu_user_001",
+            "retry_count": 3,
+            "threshold": 3,
+            "summary": "问题连续 3 次验证失败，需要用户决策。",
+            "options": ["continue", "manual", "cancel"],
+        },
+    ).json()["data"]["id"]
+
+
 def test_receive_feishu_message_event_parses_status_command():
     client = make_client()
 
@@ -167,3 +183,28 @@ def test_receive_feishu_interactive_acknowledges_action():
     assert data["project_id"] == "proj_001"
     assert data["escalation_id"] == "esc_001"
     assert data["value"]["decision"] == "continue"
+
+
+def test_escalation_decision_interactive_updates_escalation():
+    client = make_client()
+    project_id = create_project(client)
+    escalation_id = create_escalation(client, project_id)
+
+    response = client.post(
+        "/api/feishu/interactive",
+        json={
+            "action": "escalation_decision",
+            "user_id": "feishu_user_001",
+            "project_id": project_id,
+            "escalation_id": escalation_id,
+            "value": {"decision": "continue", "comment": "继续自动修复"},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["handled"] is True
+    assert data["escalation"]["id"] == escalation_id
+    assert data["escalation"]["status"] == "decided"
+    assert data["escalation"]["decision"] == "continue"
+    assert data["escalation"]["decision_comment"] == "继续自动修复"

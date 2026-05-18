@@ -5,6 +5,13 @@ from app.projects import service as project_service
 
 
 SUPPORTED_COMMANDS = {"status", "pause", "resume", "cancel", "help"}
+ACTION_LABELS = {
+    "continue": "继续自动处理",
+    "manual": "转人工处理",
+    "cancel": "取消项目",
+    "change_requirement": "变更需求",
+    "redesign": "重新设计",
+}
 
 
 def parse_command(text: str | None):
@@ -15,6 +22,49 @@ def parse_command(text: str | None):
     if command not in SUPPORTED_COMMANDS:
         return None, []
     return command, parts[1:]
+
+
+def build_project_status_notification(database_path: str, project_id: str):
+    project = project_service.get_project(database_path, project_id)
+    if project is None:
+        return None
+    project_status = project_service.get_project_status(database_path, project_id)
+    return {
+        "project_id": project_id,
+        "message_type": "interactive",
+        "card": {
+            "title": f"项目状态更新：{project['name']}",
+            "content": project_status["progress_summary"],
+            "fields": [
+                {"label": "阶段", "value": project_status["current_phase"]},
+                {"label": "状态", "value": project_status["status"]},
+            ],
+            "risks": project_status["risks"],
+            "pending_user_actions": project_status["pending_user_actions"],
+        },
+    }
+
+
+def build_escalation_notification(database_path: str, escalation_id: str):
+    escalation = escalation_service.get_escalation(database_path, escalation_id)
+    if escalation is None:
+        return None
+    return {
+        "project_id": escalation["project_id"],
+        "escalation_id": escalation_id,
+        "message_type": "interactive",
+        "card": {
+            "title": f"需要用户决策：{escalation['summary']}",
+            "content": (
+                f"阶段：{escalation['phase']}；来源：{escalation['source_agent']}；"
+                f"重试：{escalation['retry_count']}/{escalation['threshold']}"
+            ),
+            "actions": [
+                {"label": ACTION_LABELS.get(option, option), "value": {"decision": option}}
+                for option in escalation["options"]
+            ],
+        },
+    }
 
 
 def handle_event(database_path: str, request: FeishuEventRequest):

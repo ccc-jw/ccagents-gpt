@@ -19,3 +19,13 @@ def receive_event(request_body: FeishuEventRequest, request: Request):
 @router.post("/api/feishu/interactive")
 def receive_interactive(request_body: FeishuInteractiveRequest, request: Request):
     return success_response(service.handle_interactive(_database_path(request), request_body))
+
+
+@router.get("/api/feishu/projects/{project_id}/status-notification")
+def get_project_status_notification(project_id: str, request: Request):
+    return success_response(service.build_project_status_notification(_database_path(request), project_id))
+
+
+@router.get("/api/feishu/escalations/{escalation_id}/notification")
+def get_escalation_notification(escalation_id: str, request: Request):
+    return success_response(service.build_escalation_notification(_database_path(request), escalation_id))

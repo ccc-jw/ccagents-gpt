@@ -311,6 +311,55 @@ def test_change_requirement_escalation_decision_moves_project_to_requirement_rev
     assert status.json()["data"]["current_phase"] == "REQUIREMENT_REVISION"
 
 
+def test_build_project_status_notification_payload():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = client.get(f"/api/feishu/projects/{project_id}/status-notification")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data == {
+        "project_id": project_id,
+        "message_type": "interactive",
+        "card": {
+            "title": "项目状态更新：用户登录功能",
+            "content": "项目当前处于 INIT 阶段。",
+            "fields": [
+                {"label": "阶段", "value": "INIT"},
+                {"label": "状态", "value": "active"},
+            ],
+            "risks": [],
+            "pending_user_actions": [],
+        },
+    }
+
+
+def test_build_escalation_notification_payload():
+    client = make_client()
+    project_id = create_project(client)
+    escalation_id = create_escalation(client, project_id)
+
+    response = client.get(f"/api/feishu/escalations/{escalation_id}/notification")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data == {
+        "project_id": project_id,
+        "escalation_id": escalation_id,
+        "message_type": "interactive",
+        "card": {
+            "title": "需要用户决策：问题连续 3 次验证失败，需要用户决策。",
+            "content": "阶段：TEST_AND_SECURITY_VALIDATION；来源：PM；重试：3/3",
+            "actions": [
+                {"label": "继续自动处理", "value": {"decision": "continue"}},
+                {"label": "转人工处理", "value": {"decision": "manual"}},
+                {"label": "取消项目", "value": {"decision": "cancel"}},
+            ],
+        },
+    }
+
+
 def test_escalation_project_decisions_record_project_events():
     client = make_client()
     project_id = create_project(client)

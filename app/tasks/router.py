@@ -28,6 +28,16 @@ def list_tasks(
     return success_response(service.list_tasks(_database_path(request), project_id, status, phase, owner_agent))
 
 
+@router.get("/api/tasks/{task_id}")
+def get_task(task_id: str, request: Request):
+    return success_response(service.get_task(_database_path(request), task_id))
+
+
+@router.get("/api/tasks/{task_id}/runs")
+def list_task_runs(task_id: str, request: Request):
+    return success_response(service.list_task_runs(_database_path(request), task_id))
+
+
 @router.post("/api/tasks/{task_id}/assign")
 def assign_task(task_id: str, request_body: TaskAssignRequest, request: Request):
     return success_response(service.assign_task(_database_path(request), task_id, request_body.assigned_to))

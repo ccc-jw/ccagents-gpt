@@ -72,6 +72,79 @@ def test_list_tasks_filters_by_status_phase_and_owner_agent():
     assert tasks[0]["owner_agent"] == "DEV"
 
 
+def test_get_task_returns_decoded_task_detail():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id).json()["data"]["id"]
+
+    response = client.get(f"/api/tasks/{task_id}")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["id"] == task_id
+    assert data["project_id"] == project_id
+    assert data["input_artifacts"] == ["artifact_prd_final", "artifact_detail_design"]
+    assert data["expected_artifacts"] == ["self_test_report", "source_code_diff"]
+    assert data["blocked_by"] == []
+    assert "input_artifacts_json" not in data
+    assert "expected_artifacts_json" not in data
+
+
+def test_list_task_runs_returns_runs_for_task():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id).json()["data"]["id"]
+    started = client.post(
+        f"/api/tasks/{task_id}/start",
+        json={"runner_type": "claude_code_cli", "workspace_strategy": "git_worktree"},
+    )
+
+    response = client.get(f"/api/tasks/{task_id}/runs")
+
+    assert response.status_code == 200
+    runs = response.json()["data"]
+    assert len(runs) == 1
+    assert runs[0]["id"] == started.json()["data"]["task_run_id"]
+    assert runs[0]["task_id"] == task_id
+    assert runs[0]["project_id"] == project_id
+    assert runs[0]["agent_name"] == "DEV"
+    assert runs[0]["runner_type"] == "claude_code_cli"
+    assert runs[0]["workspace_strategy"] == "git_worktree"
+    assert runs[0]["status"] == "created"
+    assert runs[0]["result"] is None
+
+
+def test_list_task_runs_reflects_runner_status_update():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id).json()["data"]["id"]
+    created = client.post(
+        "/api/runner/task-runs",
+        json={
+            "task_id": task_id,
+            "project_id": project_id,
+            "agent": "DEV",
+            "runner_type": "claude_code_cli",
+            "workspace_strategy": "git_worktree",
+        },
+    )
+    task_run_id = created.json()["data"]["task_run_id"]
+    client.post(
+        f"/api/runner/task-runs/{task_run_id}/status",
+        json={"status": "completed", "summary": "自测通过", "result": {"tests": "passed"}},
+    )
+
+    response = client.get(f"/api/tasks/{task_id}/runs")
+
+    assert response.status_code == 200
+    runs = response.json()["data"]
+    assert len(runs) == 1
+    assert runs[0]["id"] == task_run_id
+    assert runs[0]["status"] == "completed"
+    assert runs[0]["summary"] == "自测通过"
+    assert runs[0]["result"] == {"tests": "passed"}
+
+
 def test_assign_start_retry_and_cancel_task():
     client = make_client()
     project_id = create_project(client)

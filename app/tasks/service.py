@@ -14,6 +14,25 @@ def _row_to_dict(row):
     return dict(row) if row else None
 
 
+def _decode_task(row):
+    if row is None:
+        return None
+    data = dict(row)
+    data["input_artifacts"] = json.loads(data.pop("input_artifacts_json") or "[]")
+    data["expected_artifacts"] = json.loads(data.pop("expected_artifacts_json") or "[]")
+    data["blocked_by"] = json.loads(data.pop("blocked_by_json") or "[]")
+    return data
+
+
+def _decode_task_run(row):
+    if row is None:
+        return None
+    data = dict(row)
+    result_json = data.pop("result_json")
+    data["result"] = json.loads(result_json) if result_json else None
+    return data
+
+
 def create_task(database_path: str, project_id: str, request: TaskCreateRequest):
     task_id = f"task_{uuid4().hex}"
     now = _now()
@@ -48,7 +67,7 @@ def create_task(database_path: str, project_id: str, request: TaskCreateRequest)
 def get_task(database_path: str, task_id: str):
     with get_connection(database_path) as connection:
         row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    return _row_to_dict(row)
+    return _decode_task(row)
 
 
 def list_tasks(database_path: str, project_id: str, status: str | None, phase: str | None, owner_agent: str | None):
@@ -65,7 +84,13 @@ def list_tasks(database_path: str, project_id: str, status: str | None, phase: s
         params.append(owner_agent)
     with get_connection(database_path) as connection:
         rows = connection.execute(sql, params).fetchall()
-    return [dict(row) for row in rows]
+    return [_decode_task(row) for row in rows]
+
+
+def list_task_runs(database_path: str, task_id: str):
+    with get_connection(database_path) as connection:
+        rows = connection.execute("SELECT * FROM task_runs WHERE task_id = ?", (task_id,)).fetchall()
+    return [_decode_task_run(row) for row in rows]
 
 
 def assign_task(database_path: str, task_id: str, assigned_to: str):

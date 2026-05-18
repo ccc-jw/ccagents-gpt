@@ -48,6 +48,18 @@ def _decode_comment(row):
     return dict(row) if row else None
 
 
+def _review_event_payload(review):
+    return {
+        "review_id": review["id"],
+        "type": review["type"],
+        "phase": review["phase"],
+        "owner_agent": review["owner_agent"],
+        "status": review["status"],
+        "round": review["round"],
+        "conclusion": review["conclusion"],
+    }
+
+
 def create_review(database_path: str, project_id: str, request: ReviewCreateRequest):
     review_id = f"review_{uuid4().hex}"
     now = _now()
@@ -72,7 +84,14 @@ def create_review(database_path: str, project_id: str, request: ReviewCreateRequ
                 now,
             ),
         )
-    return get_review(database_path, review_id)
+    review = get_review(database_path, review_id)
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "review_created",
+        _review_event_payload(review),
+    )
+    return review
 
 
 def get_review(database_path: str, review_id: str):
@@ -112,7 +131,22 @@ def add_review_comment(database_path: str, review_id: str, request: ReviewCommen
             ),
         )
         row = connection.execute("SELECT * FROM review_comments WHERE id = ?", (comment_id,)).fetchone()
-    return _decode_comment(row)
+    comment = _decode_comment(row)
+    review = get_review(database_path, review_id)
+    project_service.record_project_event(
+        database_path,
+        review["project_id"],
+        "review_comment_added",
+        {
+            "review_id": review_id,
+            "comment_id": comment["id"],
+            "reviewer_agent": comment["reviewer_agent"],
+            "status": comment["status"],
+            "severity": comment["severity"],
+            "related_artifact": comment["related_artifact"],
+        },
+    )
+    return comment
 
 
 def complete_review(database_path: str, review_id: str, request: ReviewCompleteRequest):
@@ -124,7 +158,14 @@ def complete_review(database_path: str, review_id: str, request: ReviewCompleteR
             """,
             (request.conclusion, request.conclusion, now, now, review_id),
         )
-    return get_review(database_path, review_id)
+    review = get_review(database_path, review_id)
+    project_service.record_project_event(
+        database_path,
+        review["project_id"],
+        "review_completed",
+        _review_event_payload(review),
+    )
+    return review
 
 
 def _gate_target_phase(review):

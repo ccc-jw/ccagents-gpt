@@ -236,3 +236,68 @@ def test_third_failed_review_gate_creates_escalation():
     assert data[0]["retry_count"] == 3
     assert data[0]["threshold"] == 3
     assert data[0]["status"] == "pending_user_decision"
+
+
+def test_create_review_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = create_review(client, project_id)
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "review_created"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["review_id"] == response.json()["data"]["id"]
+    assert payload["type"] == "design_review"
+    assert payload["phase"] == "DESIGN_REVIEW"
+    assert payload["owner_agent"] == "ARCH"
+    assert payload["status"] == "open"
+    assert payload["round"] == 1
+
+
+def test_add_review_comment_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    review_id = create_review(client, project_id).json()["data"]["id"]
+
+    response = client.post(
+        f"/api/reviews/{review_id}/comments",
+        json={
+            "reviewer_agent": "SEC",
+            "status": "fail",
+            "severity": "major",
+            "comment": "当前设计没有说明 token 过期策略",
+            "required_change": "补充 token 过期、刷新和失效策略",
+            "related_artifact": "artifact_detail_design_draft",
+        },
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "review_comment_added"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["review_id"] == review_id
+    assert payload["comment_id"] == response.json()["data"]["id"]
+    assert payload["reviewer_agent"] == "SEC"
+    assert payload["status"] == "fail"
+    assert payload["severity"] == "major"
+    assert payload["related_artifact"] == "artifact_detail_design_draft"
+
+
+def test_complete_review_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    review_id = create_review(client, project_id).json()["data"]["id"]
+
+    response = complete_review(client, review_id, "failed")
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "review_completed"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["review_id"] == review_id
+    assert payload["type"] == "design_review"
+    assert payload["phase"] == "DESIGN_REVIEW"
+    assert payload["status"] == "failed"
+    assert payload["conclusion"] == "failed"

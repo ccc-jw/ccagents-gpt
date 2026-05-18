@@ -6,6 +6,13 @@ from app.core.database import get_connection
 from app.runners.schemas import TaskRunCreateRequest, TaskRunStatusUpdateRequest
 
 
+TASK_STATUS_BY_RUN_STATUS = {
+    "completed": "completed",
+    "failed": "failed",
+    "cancelled": "cancelled",
+}
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -76,6 +83,16 @@ def update_task_run_status(database_path: str, task_run_id: str, request: TaskRu
                 task_run_id,
             ),
         )
+        task_status = TASK_STATUS_BY_RUN_STATUS.get(request.status)
+        if task_status:
+            connection.execute(
+                """
+                UPDATE tasks
+                SET status = ?, updated_at = ?
+                WHERE id = (SELECT task_id FROM task_runs WHERE id = ?)
+                """,
+                (task_status, now, task_run_id),
+            )
     return get_task_run(database_path, task_run_id)
 
 
@@ -89,6 +106,14 @@ def cancel_task_run(database_path: str, task_run_id: str, reason: str):
             WHERE id = ?
             """,
             (reason, json.dumps({"reason": reason}, ensure_ascii=False), now, task_run_id),
+        )
+        connection.execute(
+            """
+            UPDATE tasks
+            SET status = 'cancelled', updated_at = ?
+            WHERE id = (SELECT task_id FROM task_runs WHERE id = ?)
+            """,
+            (now, task_run_id),
         )
     return get_task_run(database_path, task_run_id)
 

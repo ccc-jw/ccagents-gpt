@@ -192,3 +192,54 @@ def test_get_runner_task_run_logs_returns_none_for_missing_run():
 
     assert response.status_code == 200
     assert response.json()["data"] is None
+
+
+def test_completed_runner_task_run_marks_task_completed():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.post(
+        f"/api/runner/task-runs/{task_run_id}/status",
+        json={"status": "completed", "summary": "自测通过", "result": {"tests": "passed"}},
+    )
+    task = client.get(f"/api/tasks/{task_id}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "completed"
+    assert task.json()["data"]["status"] == "completed"
+
+
+def test_failed_runner_task_run_marks_task_failed():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.post(
+        f"/api/runner/task-runs/{task_run_id}/status",
+        json={"status": "failed", "summary": "测试失败", "error_type": "pytest", "error_message": "1 failed"},
+    )
+    task = client.get(f"/api/tasks/{task_id}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "failed"
+    assert task.json()["data"]["status"] == "failed"
+
+
+def test_cancel_runner_task_run_marks_task_cancelled():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.post(
+        f"/api/runner/task-runs/{task_run_id}/cancel",
+        json={"reason": "用户暂停项目"},
+    )
+    task = client.get(f"/api/tasks/{task_id}")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "cancelled"
+    assert task.json()["data"]["status"] == "cancelled"

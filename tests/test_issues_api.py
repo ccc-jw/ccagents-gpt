@@ -120,3 +120,27 @@ def test_assign_and_update_issue_status():
     assert reopened.status_code == 200
     assert reopened.json()["data"]["status"] == "reopened"
     assert reopened.json()["data"]["retry_count"] == 1
+
+
+def test_reopened_issue_at_retry_threshold_creates_escalation():
+    client = make_client()
+    project_id = create_project(client)
+    issue_id = create_issue(client, project_id, max_retries=3).json()["data"]["id"]
+
+    first = client.post(f"/api/issues/{issue_id}/status", json={"status": "reopened", "reason": "第一轮验证失败"})
+    second = client.post(f"/api/issues/{issue_id}/status", json={"status": "reopened", "reason": "第二轮验证失败"})
+    third = client.post(f"/api/issues/{issue_id}/status", json={"status": "reopened", "reason": "第三轮验证失败"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 200
+    assert third.json()["data"]["retry_count"] == 3
+    escalations = client.get(f"/api/projects/{project_id}/escalations")
+    assert escalations.status_code == 200
+    data = escalations.json()["data"]
+    assert len(data) == 1
+    assert data[0]["type"] == "issue_retry_threshold"
+    assert data[0]["phase"] == "TEST_AND_SECURITY_VALIDATION"
+    assert data[0]["source_agent"] == "DEV"
+    assert data[0]["retry_count"] == 3
+    assert data[0]["threshold"] == 3

@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.core.database import get_connection
+from app.escalations import service as escalation_service
+from app.escalations.schemas import EscalationCreateRequest
 from app.issues.schemas import IssueCreateRequest
 
 
@@ -17,6 +19,9 @@ def _decode_issue(row):
     data["related_artifacts"] = json.loads(data.pop("related_artifacts_json") or "[]")
     data["reproduce_steps"] = json.loads(data.pop("reproduce_steps_json") or "[]")
     return data
+
+
+ESCALATION_OPTIONS = ["continue", "manual", "cancel", "change_requirement"]
 
 
 def create_issue(database_path: str, project_id: str, request: IssueCreateRequest):
@@ -97,6 +102,32 @@ def assign_issue(database_path: str, issue_id: str, assigned_agent: str):
     return get_issue(database_path, issue_id)
 
 
+def _get_project_owner_user_id(connection, project_id: str):
+    row = connection.execute("SELECT owner_user_id FROM projects WHERE id = ?", (project_id,)).fetchone()
+    return row["owner_user_id"] if row else None
+
+
+def _create_issue_escalation(database_path: str, issue):
+    with get_connection(database_path) as connection:
+        owner_user_id = _get_project_owner_user_id(connection, issue["project_id"])
+    if owner_user_id is None:
+        return None
+    return escalation_service.create_escalation(
+        database_path,
+        issue["project_id"],
+        EscalationCreateRequest(
+            type="issue_retry_threshold",
+            phase=issue["phase"],
+            source_agent=issue["assigned_agent"],
+            target_user_id=owner_user_id,
+            retry_count=issue["retry_count"],
+            threshold=issue["max_retries"],
+            summary=f"问题 {issue['id']} 已连续重开 {issue['retry_count']} 次，需要用户决策。",
+            options=ESCALATION_OPTIONS,
+        ),
+    )
+
+
 def update_issue_status(database_path: str, issue_id: str, status: str):
     now = _now()
     with get_connection(database_path) as connection:
@@ -110,4 +141,7 @@ def update_issue_status(database_path: str, issue_id: str, status: str):
                 "UPDATE issues SET status = ?, updated_at = ? WHERE id = ?",
                 (status, now, issue_id),
             )
-    return get_issue(database_path, issue_id)
+    issue = get_issue(database_path, issue_id)
+    if status == "reopened" and issue["retry_count"] == issue["max_retries"]:
+        _create_issue_escalation(database_path, issue)
+    return issue

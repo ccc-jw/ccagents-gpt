@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.artifacts.schemas import ArtifactCreateRequest, ArtifactVersionCreateRequest
 from app.core.database import get_connection
+from app.projects import service as project_service
 
 
 def _now():
@@ -24,6 +25,19 @@ def _decode_artifact_version(row):
     data = dict(row)
     data["metadata"] = json.loads(data.pop("metadata_json") or "{}")
     return data
+
+
+def _artifact_event_payload(artifact):
+    return {
+        "artifact_id": artifact["id"],
+        "task_id": artifact["task_id"],
+        "artifact_type": artifact["artifact_type"],
+        "name": artifact["name"],
+        "path": artifact["path"],
+        "version": artifact["version"],
+        "created_by": artifact["created_by"],
+        "status": artifact["status"],
+    }
 
 
 def create_artifact(database_path: str, project_id: str, request: ArtifactCreateRequest):
@@ -70,7 +84,14 @@ def create_artifact(database_path: str, project_id: str, request: ArtifactCreate
                 now,
             ),
         )
-    return get_artifact(database_path, artifact_id)
+    artifact = get_artifact(database_path, artifact_id)
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "artifact_created",
+        _artifact_event_payload(artifact),
+    )
+    return artifact
 
 
 def get_artifact(database_path: str, artifact_id: str):
@@ -140,7 +161,21 @@ def create_artifact_version(database_path: str, artifact_id: str, request: Artif
             ),
         )
         row = connection.execute("SELECT * FROM artifact_versions WHERE id = ?", (version_id,)).fetchone()
-    return _decode_artifact_version(row)
+    version = _decode_artifact_version(row)
+    artifact = get_artifact(database_path, artifact_id)
+    project_service.record_project_event(
+        database_path,
+        artifact["project_id"],
+        "artifact_version_created",
+        {
+            "artifact_id": artifact_id,
+            "version": version["version"],
+            "path": version["path"],
+            "created_by": version["created_by"],
+            "change_summary": version["change_summary"],
+        },
+    )
+    return version
 
 
 def list_artifact_versions(database_path: str, artifact_id: str):

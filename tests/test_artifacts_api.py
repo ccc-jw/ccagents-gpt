@@ -118,3 +118,52 @@ def test_create_and_list_artifact_versions():
     assert [item["version"] for item in listed.json()["data"]] == ["v1", "v2"]
     assert detail.json()["data"]["version"] == "v2"
     assert detail.json()["data"]["path"] == "docs/design/detail-design-final-v2.md"
+
+
+def test_create_artifact_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+
+    response = create_artifact(client, project_id, task_id)
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "artifact_created"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["artifact_id"] == response.json()["data"]["id"]
+    assert payload["task_id"] == task_id
+    assert payload["artifact_type"] == "design_doc"
+    assert payload["name"] == "detail-design-final.md"
+    assert payload["path"] == "docs/design/detail-design-final.md"
+    assert payload["version"] == "v1"
+    assert payload["created_by"] == "ARCH"
+    assert payload["status"] == "active"
+
+
+def test_create_artifact_version_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    artifact_id = create_artifact(client, project_id, task_id).json()["data"]["id"]
+
+    response = client.post(
+        f"/api/artifacts/{artifact_id}/versions",
+        json={
+            "version": "v2",
+            "path": "docs/design/detail-design-final-v2.md",
+            "created_by": "ARCH",
+            "change_summary": "补充 token 过期和刷新策略",
+            "metadata": {"review_round": 2},
+        },
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "artifact_version_created"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["artifact_id"] == artifact_id
+    assert payload["version"] == "v2"
+    assert payload["path"] == "docs/design/detail-design-final-v2.md"
+    assert payload["created_by"] == "ARCH"
+    assert payload["change_summary"] == "补充 token 过期和刷新策略"

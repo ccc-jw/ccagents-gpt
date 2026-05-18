@@ -173,6 +173,63 @@ def test_assign_start_retry_and_cancel_task():
     assert cancelled.json()["data"]["status"] == "cancelled"
 
 
+def test_dispatch_next_pending_task_starts_one_task():
+    client = make_client()
+    project_id = create_project(client)
+    dev_task_id = create_task(client, project_id, title="实现登录接口", owner_agent="DEV").json()["data"]["id"]
+    create_task(client, project_id, title="编写测试用例", owner_agent="TEST")
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-next",
+        json={"runner_type": "claude_code_cli", "workspace_strategy": "git_worktree"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["dispatched"] is True
+    assert data["task_id"] == dev_task_id
+    assert data["task_run_id"].startswith("run_")
+    assert data["phase"] == "DEVELOPMENT"
+    assert data["agent_name"] == "DEV"
+    assert data["status"] == "created"
+    assert client.get(f"/api/tasks/{dev_task_id}").json()["data"]["status"] == "running"
+
+
+def test_dispatch_next_pending_task_returns_empty_result_when_no_tasks_match():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-next",
+        json={"phase": "DEVELOPMENT", "owner_agent": "DEV"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data == {"dispatched": False, "message": "没有匹配的待调度任务。"}
+
+
+def test_dispatch_next_pending_task_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id, title="实现登录接口", owner_agent="DEV").json()["data"]["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-next",
+        json={"runner_type": "claude_code_cli", "workspace_strategy": "git_worktree", "owner_agent": "DEV"},
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_dispatched"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["task_id"] == task_id
+    assert payload["task_run_id"] == response.json()["data"]["task_run_id"]
+    assert payload["filters"] == {"phase": None, "owner_agent": "DEV"}
+    assert payload["runner_type"] == "claude_code_cli"
+    assert payload["workspace_strategy"] == "git_worktree"
+
+
 def test_dispatch_pending_tasks_starts_project_tasks():
     client = make_client()
     project_id = create_project(client)

@@ -31,6 +31,20 @@ def dispatch_pending_tasks(project_id: str, request_body: TaskDispatchRequest, r
     )
 
 
+@router.post("/api/projects/{project_id}/tasks/dispatch-next")
+def dispatch_next_pending_task(project_id: str, request_body: TaskDispatchRequest, request: Request):
+    return success_response(
+        service.dispatch_next_pending_task(
+            _database_path(request),
+            project_id,
+            request_body.runner_type,
+            request_body.workspace_strategy,
+            request_body.phase,
+            request_body.owner_agent,
+        )
+    )
+
+
 @router.get("/api/projects/{project_id}/tasks")
 def list_tasks(
     project_id: str,

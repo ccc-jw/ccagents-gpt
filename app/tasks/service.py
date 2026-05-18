@@ -150,6 +150,41 @@ def dispatch_pending_tasks(
     return result
 
 
+def dispatch_next_pending_task(
+    database_path: str,
+    project_id: str,
+    runner_type: str,
+    workspace_strategy: str | None,
+    phase: str | None = None,
+    owner_agent: str | None = None,
+):
+    tasks = list_tasks(database_path, project_id, "pending", phase, owner_agent)
+    if not tasks:
+        return {"dispatched": False, "message": "没有匹配的待调度任务。"}
+    task = tasks[0]
+    run = start_task(database_path, task["id"], runner_type, workspace_strategy)
+    result = {
+        "dispatched": True,
+        "task_id": task["id"],
+        "task_run_id": run["task_run_id"],
+        "phase": task["phase"],
+        "agent_name": task["owner_agent"],
+        "status": run["status"],
+    }
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "task_dispatched",
+        {
+            **result,
+            "filters": {"phase": phase, "owner_agent": owner_agent},
+            "runner_type": runner_type,
+            "workspace_strategy": workspace_strategy,
+        },
+    )
+    return result
+
+
 def assign_task(database_path: str, task_id: str, assigned_to: str):
     now = _now()
     with get_connection(database_path) as connection:

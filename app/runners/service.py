@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.core.database import get_connection
+from app.projects import service as project_service
 from app.runners.schemas import TaskRunCreateRequest, TaskRunStatusUpdateRequest
 
 
@@ -24,6 +25,24 @@ def _decode_task_run(row):
     result_json = data.pop("result_json")
     data["result"] = json.loads(result_json) if result_json else None
     return data
+
+
+def _record_task_run_event(database_path: str, task_run: dict):
+    if task_run["status"] not in TASK_STATUS_BY_RUN_STATUS:
+        return
+    project_service.record_project_event(
+        database_path,
+        task_run["project_id"],
+        f"task_run_{task_run['status']}",
+        {
+            "task_id": task_run["task_id"],
+            "task_run_id": task_run["id"],
+            "status": task_run["status"],
+            "summary": task_run["summary"],
+            "error_type": task_run["error_type"],
+            "error_message": task_run["error_message"],
+        },
+    )
 
 
 def create_task_run(database_path: str, request: TaskRunCreateRequest):
@@ -93,7 +112,9 @@ def update_task_run_status(database_path: str, task_run_id: str, request: TaskRu
                 """,
                 (task_status, now, task_run_id),
             )
-    return get_task_run(database_path, task_run_id)
+    task_run = get_task_run(database_path, task_run_id)
+    _record_task_run_event(database_path, task_run)
+    return task_run
 
 
 def cancel_task_run(database_path: str, task_run_id: str, reason: str):
@@ -115,7 +136,9 @@ def cancel_task_run(database_path: str, task_run_id: str, reason: str):
             """,
             (now, task_run_id),
         )
-    return get_task_run(database_path, task_run_id)
+    task_run = get_task_run(database_path, task_run_id)
+    _record_task_run_event(database_path, task_run)
+    return task_run
 
 
 def get_task_run_logs(database_path: str, task_run_id: str):

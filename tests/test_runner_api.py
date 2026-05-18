@@ -243,3 +243,72 @@ def test_cancel_runner_task_run_marks_task_cancelled():
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "cancelled"
     assert task.json()["data"]["status"] == "cancelled"
+
+
+def test_completed_runner_task_run_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.post(
+        f"/api/runner/task-runs/{task_run_id}/status",
+        json={"status": "completed", "summary": "自测通过", "result": {"tests": "passed"}},
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_run_completed"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["task_id"] == task_id
+    assert payload["task_run_id"] == task_run_id
+    assert payload["status"] == "completed"
+    assert payload["summary"] == "自测通过"
+    assert payload["error_type"] is None
+    assert payload["error_message"] is None
+
+
+def test_failed_runner_task_run_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.post(
+        f"/api/runner/task-runs/{task_run_id}/status",
+        json={"status": "failed", "summary": "测试失败", "error_type": "pytest", "error_message": "1 failed"},
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_run_failed"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["task_id"] == task_id
+    assert payload["task_run_id"] == task_run_id
+    assert payload["status"] == "failed"
+    assert payload["summary"] == "测试失败"
+    assert payload["error_type"] == "pytest"
+    assert payload["error_message"] == "1 failed"
+
+
+def test_cancelled_runner_task_run_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    response = client.post(
+        f"/api/runner/task-runs/{task_run_id}/cancel",
+        json={"reason": "用户暂停项目"},
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "task_run_cancelled"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["task_id"] == task_id
+    assert payload["task_run_id"] == task_run_id
+    assert payload["status"] == "cancelled"
+    assert payload["summary"] == "用户暂停项目"
+    assert payload["error_type"] is None
+    assert payload["error_message"] is None

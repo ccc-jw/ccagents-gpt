@@ -25,6 +25,11 @@ def list_agents(request: Request, enabled: bool | None = None):
     return success_response(service.list_agents(_database_path(request), enabled))
 
 
+@router.post("/api/agents/bootstrap-defaults")
+def bootstrap_default_agents(request: Request):
+    return success_response(service.bootstrap_default_agents(_database_path(request)))
+
+
 @router.get("/api/agents/{agent_id}")
 def get_agent(agent_id: str, request: Request):
     return success_response(service.get_agent(_database_path(request), agent_id))

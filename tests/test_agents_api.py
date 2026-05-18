@@ -111,3 +111,66 @@ def test_get_agent_model_config_returns_redacted_resolved_config(tmp_path, monke
     assert data["timeout_seconds"] == 1200
     assert data["api_key"] == "***"
     assert "runtime-secret" not in str(data)
+
+
+def test_bootstrap_default_agents_creates_standard_team():
+    client = make_client()
+
+    response = client.post("/api/agents/bootstrap-defaults")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    data = body["data"]
+    assert data["created"] == 7
+    assert data["existing"] == 0
+    assert [agent["name"] for agent in data["agents"]] == ["PM", "PDM", "RES", "ARCH", "DEV", "TEST", "SEC"]
+    assert all(agent["enabled"] is True for agent in data["agents"])
+    assert all(agent["model_config"] == {} for agent in data["agents"])
+    assert all("model_config_json" not in agent for agent in data["agents"])
+    roles = {agent["name"]: agent["role"] for agent in data["agents"]}
+    assert roles == {
+        "PM": "project_manager",
+        "PDM": "product_manager",
+        "RES": "researcher",
+        "ARCH": "architect",
+        "DEV": "developer",
+        "TEST": "tester",
+        "SEC": "security",
+    }
+
+
+def test_bootstrap_default_agents_is_idempotent():
+    client = make_client()
+
+    first = client.post("/api/agents/bootstrap-defaults")
+    second = client.post("/api/agents/bootstrap-defaults")
+    agents = client.get("/api/agents").json()["data"]
+
+    assert first.json()["data"]["created"] == 7
+    assert first.json()["data"]["existing"] == 0
+    assert second.json()["data"]["created"] == 0
+    assert second.json()["data"]["existing"] == 7
+    assert [agent["name"] for agent in agents] == ["PM", "PDM", "RES", "ARCH", "DEV", "TEST", "SEC"]
+
+
+def test_bootstrap_default_agents_does_not_overwrite_existing_agents():
+    client = make_client()
+    create_agent(
+        client,
+        name="DEV",
+        role="developer",
+        description="用户自定义开发工程师",
+        enabled=False,
+        model_config={"model": "claude-sonnet-4-6"},
+    )
+
+    response = client.post("/api/agents/bootstrap-defaults")
+
+    data = response.json()["data"]
+    assert data["created"] == 6
+    assert data["existing"] == 1
+    dev = next(agent for agent in data["agents"] if agent["name"] == "DEV")
+    assert dev["description"] == "用户自定义开发工程师"
+    assert dev["enabled"] is False
+    assert dev["model_config"] == {"model": "claude-sonnet-4-6"}

@@ -165,3 +165,72 @@ def test_list_project_events_includes_lifecycle_action_reasons():
     assert events_by_type["project_paused"]["payload"] == {"reason": "等待用户确认设计变更"}
     assert events_by_type["project_resumed"]["payload"] == {"reason": "用户已确认继续推进"}
     assert events_by_type["project_cancelled"]["payload"] == {"reason": "用户决定终止当前需求"}
+
+
+def test_project_status_includes_progress_risks_and_pending_actions():
+    client = make_client()
+    project_id = create_project(client).json()["data"]["id"]
+    first_task = client.post(
+        f"/api/projects/{project_id}/tasks",
+        json={
+            "phase": "DEVELOPMENT",
+            "owner_agent": "DEV",
+            "title": "实现登录接口",
+            "description": "根据 PRD 和详细设计实现登录接口",
+            "input_artifacts": [],
+            "expected_artifacts": [],
+            "max_retries": 3,
+        },
+    ).json()["data"]["id"]
+    second_task = client.post(
+        f"/api/projects/{project_id}/tasks",
+        json={
+            "phase": "DEVELOPMENT",
+            "owner_agent": "TEST",
+            "title": "验证登录接口",
+            "description": "执行测试清单",
+            "input_artifacts": [],
+            "expected_artifacts": [],
+            "max_retries": 3,
+        },
+    ).json()["data"]["id"]
+    client.post(f"/api/tasks/{first_task}/start", json={"runner_type": "claude_code_cli"})
+    client.post(f"/api/tasks/{second_task}/cancel", json={"reason": "暂不执行"})
+    client.post(
+        f"/api/projects/{project_id}/issues",
+        json={
+            "source": "security",
+            "phase": "TEST_AND_SECURITY_VALIDATION",
+            "title": "Token 未设置过期时间",
+            "description": "安全检查发现 token 未设置过期时间",
+            "severity": "critical",
+            "priority": "high",
+            "assigned_agent": "DEV",
+            "related_artifacts": [],
+            "reproduce_steps": [],
+            "expected_result": "Token 有明确过期时间",
+            "actual_result": "Token 永不过期",
+            "max_retries": 3,
+        },
+    )
+    client.post(
+        f"/api/projects/{project_id}/escalations",
+        json={
+            "type": "issue_retry_threshold",
+            "phase": "TEST_AND_SECURITY_VALIDATION",
+            "source_agent": "DEV",
+            "target_user_id": "feishu_user_001",
+            "retry_count": 3,
+            "threshold": 3,
+            "summary": "问题连续重开 3 次，需要用户决策。",
+            "options": ["continue", "manual", "cancel"],
+        },
+    )
+
+    response = client.get(f"/api/projects/{project_id}/status")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["progress_summary"] == "任务 2 个：pending 0，running 1，completed 0，failed 0，cancelled 1。"
+    assert data["risks"] == ["存在 1 个 critical 未关闭问题。"]
+    assert data["pending_user_actions"] == ["问题连续重开 3 次，需要用户决策。"]

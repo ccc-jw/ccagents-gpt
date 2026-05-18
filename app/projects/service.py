@@ -105,17 +105,67 @@ def list_projects(database_path: str, owner_user_id: str | None, status: str | N
     return [_row_to_dict(row) for row in rows]
 
 
+def _task_status_counts(database_path: str, project_id: str):
+    with get_connection(database_path) as connection:
+        rows = connection.execute(
+            "SELECT status, COUNT(*) AS count FROM tasks WHERE project_id = ? GROUP BY status",
+            (project_id,),
+        ).fetchall()
+    counts = {"pending": 0, "running": 0, "completed": 0, "failed": 0, "cancelled": 0}
+    counts.update({row["status"]: row["count"] for row in rows})
+    return counts
+
+
+def _critical_open_issue_count(database_path: str, project_id: str):
+    with get_connection(database_path) as connection:
+        row = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM issues
+            WHERE project_id = ? AND severity = 'critical' AND status NOT IN ('fixed', 'closed', 'cancelled')
+            """,
+            (project_id,),
+        ).fetchone()
+    return row["count"]
+
+
+def _pending_escalation_summaries(database_path: str, project_id: str):
+    with get_connection(database_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT summary
+            FROM escalations
+            WHERE project_id = ? AND status = 'pending_user_decision'
+            ORDER BY created_at ASC
+            """,
+            (project_id,),
+        ).fetchall()
+    return [row["summary"] for row in rows]
+
+
 def get_project_status(database_path: str, project_id: str):
     project = get_project(database_path, project_id)
     if project is None:
         return None
+    task_counts = _task_status_counts(database_path, project_id)
+    task_total = sum(task_counts.values())
+    critical_open_issues = _critical_open_issue_count(database_path, project_id)
+    risks = []
+    if critical_open_issues:
+        risks.append(f"存在 {critical_open_issues} 个 critical 未关闭问题。")
+    progress_summary = f"项目当前处于 {project['current_phase']} 阶段。"
+    if task_total:
+        progress_summary = (
+            f"任务 {task_total} 个：pending {task_counts['pending']}，running {task_counts['running']}，"
+            f"completed {task_counts['completed']}，failed {task_counts['failed']}，cancelled {task_counts['cancelled']}。"
+        )
     return {
         "project_id": project_id,
         "current_phase": project["current_phase"],
         "status": project["status"],
-        "progress_summary": f"项目当前处于 {project['current_phase']} 阶段。",
-        "risks": [],
-        "pending_user_actions": [],
+        "progress_summary": progress_summary,
+        "risks": risks,
+        "pending_user_actions": _pending_escalation_summaries(database_path, project_id),
     }
 
 

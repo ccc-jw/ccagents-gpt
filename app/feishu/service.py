@@ -34,6 +34,24 @@ def handle_event(database_path: str, request: FeishuEventRequest):
         response["handled"] = True
         response["project_status"] = project_status
         response["reply_text"] = project_status["progress_summary"] if project_status else "项目不存在"
+    if command == "pause" and args:
+        project = project_service.get_project(database_path, args[0])
+        response["handled"] = project is not None
+        if project:
+            project_service.update_project_status(database_path, args[0], "paused", "project_paused", "飞书命令暂停项目")
+            response["project_status"] = project_service.get_project_status(database_path, args[0])
+            response["reply_text"] = "项目已暂停。"
+        else:
+            response["reply_text"] = "项目不存在"
+    if command == "resume" and args:
+        project = project_service.get_project(database_path, args[0])
+        response["handled"] = project is not None
+        if project:
+            project_service.update_project_status(database_path, args[0], "active", "project_resumed", "飞书命令恢复项目")
+            response["project_status"] = project_service.get_project_status(database_path, args[0])
+            response["reply_text"] = "项目已恢复。"
+        else:
+            response["reply_text"] = "项目不存在"
     return response
 
 

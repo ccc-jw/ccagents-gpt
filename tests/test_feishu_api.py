@@ -91,6 +91,27 @@ def test_status_command_returns_project_status_summary():
     assert data["reply_text"] == "项目当前处于 INIT 阶段。"
 
 
+def test_pause_and_resume_commands_update_project_status():
+    client = make_client()
+    project_id = create_project(client)
+
+    paused = post_event(client, f"/pause {project_id}")
+    paused_status = client.get(f"/api/projects/{project_id}/status")
+    resumed = post_event(client, f"/resume {project_id}")
+    resumed_status = client.get(f"/api/projects/{project_id}/status")
+
+    assert paused.status_code == 200
+    assert paused.json()["data"]["handled"] is True
+    assert paused.json()["data"]["project_status"]["status"] == "paused"
+    assert paused.json()["data"]["reply_text"] == "项目已暂停。"
+    assert paused_status.json()["data"]["status"] == "paused"
+    assert resumed.status_code == 200
+    assert resumed.json()["data"]["handled"] is True
+    assert resumed.json()["data"]["project_status"]["status"] == "active"
+    assert resumed.json()["data"]["reply_text"] == "项目已恢复。"
+    assert resumed_status.json()["data"]["status"] == "active"
+
+
 def test_parse_supported_feishu_slash_commands():
     client = make_client()
 

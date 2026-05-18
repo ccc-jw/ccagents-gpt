@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.core.database import get_connection
 from app.escalations.schemas import EscalationCreateRequest, EscalationDecisionRequest
+from app.projects import service as project_service
 
 
 def _now():
@@ -16,6 +17,21 @@ def _decode_escalation(row):
     data = dict(row)
     data["options"] = json.loads(data.pop("options_json"))
     return data
+
+
+def _escalation_event_payload(escalation):
+    return {
+        "escalation_id": escalation["id"],
+        "type": escalation["type"],
+        "phase": escalation["phase"],
+        "source_agent": escalation["source_agent"],
+        "target_user_id": escalation["target_user_id"],
+        "status": escalation["status"],
+        "retry_count": escalation["retry_count"],
+        "threshold": escalation["threshold"],
+        "decision": escalation["decision"],
+        "decision_comment": escalation["decision_comment"],
+    }
 
 
 def create_escalation(database_path: str, project_id: str, request: EscalationCreateRequest):
@@ -45,7 +61,14 @@ def create_escalation(database_path: str, project_id: str, request: EscalationCr
                 now,
             ),
         )
-    return get_escalation(database_path, escalation_id)
+    escalation = get_escalation(database_path, escalation_id)
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "escalation_created",
+        _escalation_event_payload(escalation),
+    )
+    return escalation
 
 
 def get_escalation(database_path: str, escalation_id: str):
@@ -71,4 +94,13 @@ def decide_escalation(database_path: str, escalation_id: str, request: Escalatio
             """,
             (request.decision, request.comment, now, now, escalation_id),
         )
-    return get_escalation(database_path, escalation_id)
+    escalation = get_escalation(database_path, escalation_id)
+    if escalation is None:
+        return None
+    project_service.record_project_event(
+        database_path,
+        escalation["project_id"],
+        "escalation_decided",
+        _escalation_event_payload(escalation),
+    )
+    return escalation

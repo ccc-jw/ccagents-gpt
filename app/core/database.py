@@ -119,6 +119,19 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_project_id ON artifacts(project_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_type ON artifacts(artifact_type);
 
+CREATE TABLE IF NOT EXISTS artifact_versions (
+    id TEXT PRIMARY KEY,
+    artifact_id TEXT NOT NULL,
+    version TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    change_summary TEXT,
+    metadata_json TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (artifact_id) REFERENCES artifacts(id)
+);
+CREATE INDEX IF NOT EXISTS idx_artifact_versions_artifact_id ON artifact_versions(artifact_id);
+
 CREATE TABLE IF NOT EXISTS reviews (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,

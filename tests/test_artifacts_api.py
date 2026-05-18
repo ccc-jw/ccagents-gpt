@@ -89,3 +89,32 @@ def test_list_artifacts_filters_and_get_artifact_returns_metadata():
     assert detail.status_code == 200
     assert detail.json()["data"]["id"] == artifact_id
     assert detail.json()["data"]["metadata"] == {"phase": "DESIGN_REVIEW"}
+
+
+def test_create_and_list_artifact_versions():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    artifact_id = create_artifact(client, project_id, task_id).json()["data"]["id"]
+
+    created = client.post(
+        f"/api/artifacts/{artifact_id}/versions",
+        json={
+            "version": "v2",
+            "path": "docs/design/detail-design-final-v2.md",
+            "created_by": "ARCH",
+            "change_summary": "补充 token 过期和刷新策略",
+            "metadata": {"review_round": 2},
+        },
+    )
+    listed = client.get(f"/api/artifacts/{artifact_id}/versions")
+    detail = client.get(f"/api/artifacts/{artifact_id}")
+
+    assert created.status_code == 200
+    assert created.json()["data"]["artifact_id"] == artifact_id
+    assert created.json()["data"]["version"] == "v2"
+    assert created.json()["data"]["metadata"] == {"review_round": 2}
+    assert listed.status_code == 200
+    assert [item["version"] for item in listed.json()["data"]] == ["v1", "v2"]
+    assert detail.json()["data"]["version"] == "v2"
+    assert detail.json()["data"]["path"] == "docs/design/detail-design-final-v2.md"

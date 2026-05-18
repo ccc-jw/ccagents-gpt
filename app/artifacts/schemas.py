@@ -11,3 +11,11 @@ class ArtifactCreateRequest(BaseModel):
     version: str = "v1"
     created_by: str
     metadata: dict[str, Any] = {}
+
+
+class ArtifactVersionCreateRequest(BaseModel):
+    version: str
+    path: str
+    created_by: str
+    change_summary: str | None = None
+    metadata: dict[str, Any] = {}

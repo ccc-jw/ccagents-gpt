@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.core.database import get_connection
+from app.projects import service as project_service
 from app.tasks.schemas import TaskCreateRequest
 
 
@@ -114,7 +115,20 @@ def dispatch_pending_tasks(
             }
         )
     message = "没有匹配的待调度任务。" if not dispatched else None
-    return {"count": len(dispatched), "dispatched": dispatched, "message": message}
+    result = {"count": len(dispatched), "dispatched": dispatched, "message": message}
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "tasks_dispatched",
+        {
+            "count": len(dispatched),
+            "filters": {"phase": phase, "owner_agent": owner_agent},
+            "runner_type": runner_type,
+            "workspace_strategy": workspace_strategy,
+            "dispatched": dispatched,
+        },
+    )
+    return result
 
 
 def assign_task(database_path: str, task_id: str, assigned_to: str):

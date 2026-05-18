@@ -41,6 +41,25 @@ def _record_event(database_path: str, project_id: str, event_type: str, reason: 
         )
 
 
+def record_project_event(database_path: str, project_id: str, event_type: str, payload: dict):
+    with get_connection(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO project_events (id, project_id, event_type, actor_type, actor_id, payload_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"evt_{uuid4().hex}",
+                project_id,
+                event_type,
+                "system",
+                "api",
+                json.dumps(payload, ensure_ascii=False),
+                _now(),
+            ),
+        )
+
+
 def create_project(database_path: str, request: ProjectCreateRequest):
     project_id = f"proj_{uuid4().hex}"
     now = _now()

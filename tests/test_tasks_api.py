@@ -241,3 +241,25 @@ def test_dispatch_pending_tasks_returns_empty_result_when_no_tasks_match():
     assert data["dispatched"] == []
     assert data["message"] == "没有匹配的待调度任务。"
     assert client.get(f"/api/tasks/{test_task_id}").json()["data"]["status"] == "pending"
+
+
+def test_dispatch_pending_tasks_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id, title="实现登录接口", owner_agent="DEV").json()["data"]["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-pending",
+        json={"runner_type": "claude_code_cli", "workspace_strategy": "git_worktree", "owner_agent": "DEV"},
+    )
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "tasks_dispatched"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["count"] == 1
+    assert payload["filters"] == {"phase": None, "owner_agent": "DEV"}
+    assert payload["runner_type"] == "claude_code_cli"
+    assert payload["workspace_strategy"] == "git_worktree"
+    assert payload["dispatched"][0]["task_id"] == task_id
+    assert payload["dispatched"][0]["task_run_id"] == response.json()["data"]["dispatched"][0]["task_run_id"]

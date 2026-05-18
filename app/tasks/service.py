@@ -113,7 +113,8 @@ def dispatch_pending_tasks(
                 "status": run["status"],
             }
         )
-    return {"count": len(dispatched), "dispatched": dispatched}
+    message = "没有匹配的待调度任务。" if not dispatched else None
+    return {"count": len(dispatched), "dispatched": dispatched, "message": message}
 
 
 def assign_task(database_path: str, task_id: str, assigned_to: str):

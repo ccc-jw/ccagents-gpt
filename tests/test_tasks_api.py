@@ -223,3 +223,21 @@ def test_dispatch_pending_tasks_filters_by_phase_and_owner_agent():
     assert client.get(f"/api/tasks/{dev_task_id}").json()["data"]["status"] == "running"
     assert client.get(f"/api/tasks/{test_task_id}").json()["data"]["status"] == "pending"
     assert client.get(f"/api/tasks/{test_task_id}/runs").json()["data"] == []
+
+
+def test_dispatch_pending_tasks_returns_empty_result_when_no_tasks_match():
+    client = make_client()
+    project_id = create_project(client)
+    test_task_id = create_task(client, project_id, title="编写测试用例", owner_agent="TEST").json()["data"]["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-pending",
+        json={"phase": "DEVELOPMENT", "owner_agent": "DEV"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["count"] == 0
+    assert data["dispatched"] == []
+    assert data["message"] == "没有匹配的待调度任务。"
+    assert client.get(f"/api/tasks/{test_task_id}").json()["data"]["status"] == "pending"

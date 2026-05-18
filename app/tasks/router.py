@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 
 from app.core.responses import success_response
 from app.tasks import service
-from app.tasks.schemas import TaskAssignRequest, TaskCreateRequest, TaskReasonRequest, TaskStartRequest
+from app.tasks.schemas import TaskAssignRequest, TaskCreateRequest, TaskDispatchRequest, TaskReasonRequest, TaskStartRequest
 
 router = APIRouter()
 
@@ -15,6 +15,15 @@ def _database_path(request: Request) -> str:
 def create_task(project_id: str, request_body: TaskCreateRequest, request: Request):
     task = service.create_task(_database_path(request), project_id, request_body)
     return success_response({"id": task["id"], "status": task["status"]})
+
+
+@router.post("/api/projects/{project_id}/tasks/dispatch-pending")
+def dispatch_pending_tasks(project_id: str, request_body: TaskDispatchRequest, request: Request):
+    return success_response(
+        service.dispatch_pending_tasks(
+            _database_path(request), project_id, request_body.runner_type, request_body.workspace_strategy
+        )
+    )
 
 
 @router.get("/api/projects/{project_id}/tasks")

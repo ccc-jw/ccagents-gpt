@@ -171,3 +171,29 @@ def test_assign_start_retry_and_cancel_task():
     cancelled = client.post(f"/api/tasks/{task_id}/cancel", json={"reason": "项目已暂停"})
     assert cancelled.status_code == 200
     assert cancelled.json()["data"]["status"] == "cancelled"
+
+
+def test_dispatch_pending_tasks_starts_project_tasks():
+    client = make_client()
+    project_id = create_project(client)
+    first_task_id = create_task(client, project_id, title="实现登录接口", owner_agent="DEV").json()["data"]["id"]
+    second_task_id = create_task(client, project_id, title="编写测试用例", owner_agent="TEST").json()["data"]["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-pending",
+        json={"runner_type": "claude_code_cli", "workspace_strategy": "git_worktree"},
+    )
+    first_runs = client.get(f"/api/tasks/{first_task_id}/runs").json()["data"]
+    second_runs = client.get(f"/api/tasks/{second_task_id}/runs").json()["data"]
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["count"] == 2
+    assert {item["task_id"] for item in data["dispatched"]} == {first_task_id, second_task_id}
+    assert {item["agent_name"] for item in data["dispatched"]} == {"DEV", "TEST"}
+    assert all(item["status"] == "created" for item in data["dispatched"])
+    assert first_runs[0]["status"] == "created"
+    assert first_runs[0]["workspace_strategy"] == "git_worktree"
+    assert second_runs[0]["status"] == "created"
+    assert client.get(f"/api/tasks/{first_task_id}").json()["data"]["status"] == "running"
+    assert client.get(f"/api/tasks/{second_task_id}").json()["data"]["status"] == "running"

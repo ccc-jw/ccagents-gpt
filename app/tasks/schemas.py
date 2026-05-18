@@ -21,5 +21,10 @@ class TaskStartRequest(BaseModel):
     workspace_strategy: str | None = None
 
 
+class TaskDispatchRequest(BaseModel):
+    runner_type: str = "claude_code_cli"
+    workspace_strategy: str | None = None
+
+
 class TaskReasonRequest(BaseModel):
     reason: str

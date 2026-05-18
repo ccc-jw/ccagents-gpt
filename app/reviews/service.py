@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.core.database import get_connection
+from app.escalations import service as escalation_service
+from app.escalations.schemas import EscalationCreateRequest
 from app.projects import service as project_service
 from app.workflows import service as workflow_service
 from app.workflows.state_machine import can_transition
@@ -23,6 +25,10 @@ GATE_TARGETS = {
 
 class ReviewGateError(ValueError):
     pass
+
+
+ESCALATION_THRESHOLD = 3
+ESCALATION_OPTIONS = ["continue", "redesign", "manual", "cancel", "change_requirement"]
 
 
 def _now():
@@ -128,6 +134,41 @@ def _gate_target_phase(review):
         raise ReviewGateError("评审类型或结论不支持自动门禁") from exc
 
 
+def _count_failed_review_gates(database_path: str, project_id: str, phase: str):
+    with get_connection(database_path) as connection:
+        row = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM project_events
+            WHERE project_id = ?
+              AND event_type = 'review_gate_failed'
+              AND json_extract(payload_json, '$.from_phase') = ?
+            """,
+            (project_id, phase),
+        ).fetchone()
+    return row["count"]
+
+
+def _ensure_review_gate_escalation(database_path: str, project, review):
+    retry_count = _count_failed_review_gates(database_path, review["project_id"], review["phase"])
+    if retry_count != ESCALATION_THRESHOLD:
+        return None
+    return escalation_service.create_escalation(
+        database_path,
+        review["project_id"],
+        EscalationCreateRequest(
+            type="review_failed_threshold",
+            phase=review["phase"],
+            source_agent="PM",
+            target_user_id=project["owner_user_id"],
+            retry_count=retry_count,
+            threshold=ESCALATION_THRESHOLD,
+            summary=f"{review['phase']} 阶段评审连续 {retry_count} 次未通过，需要用户决策。",
+            options=ESCALATION_OPTIONS,
+        ),
+    )
+
+
 def evaluate_review_gate(database_path: str, review_id: str):
     review = get_review(database_path, review_id)
     if review is None:
@@ -152,6 +193,9 @@ def evaluate_review_gate(database_path: str, review_id: str):
         review["conclusion"],
         [review_id],
     )
+    escalation = None
+    if review["conclusion"] == "failed":
+        escalation = _ensure_review_gate_escalation(database_path, project, review)
     return {
         "review_id": review_id,
         "project_id": review["project_id"],
@@ -159,4 +203,5 @@ def evaluate_review_gate(database_path: str, review_id: str):
         "to_phase": to_phase,
         "conclusion": review["conclusion"],
         "workflow": workflow_service.get_workflow(database_path, review["project_id"]),
+        "escalation": escalation,
     }

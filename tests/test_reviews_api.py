@@ -203,3 +203,36 @@ def test_evaluate_review_gate_rejects_phase_mismatch():
     assert response.status_code == 400
     workflow = client.get(f"/api/projects/{project_id}/workflow")
     assert workflow.json()["data"]["current_phase"] == "INIT"
+
+
+def fail_requirement_review(client, project_id):
+    review_id = create_review_with(client, project_id, "requirement_review", "REQUIREMENT_REVIEW").json()["data"]["id"]
+    complete_review(client, review_id, "failed")
+    return client.post(f"/api/reviews/{review_id}/evaluate-gate")
+
+
+def test_third_failed_review_gate_creates_escalation():
+    client = make_client()
+    project_id = create_project(client)
+    advance_to_requirement_review(client, project_id)
+
+    first = fail_requirement_review(client, project_id)
+    advance(client, project_id, "REQUIREMENT_REVISION", "REQUIREMENT_DISCUSSION")
+    advance(client, project_id, "REQUIREMENT_DISCUSSION", "REQUIREMENT_REVIEW")
+    second = fail_requirement_review(client, project_id)
+    advance(client, project_id, "REQUIREMENT_REVISION", "REQUIREMENT_DISCUSSION")
+    advance(client, project_id, "REQUIREMENT_DISCUSSION", "REQUIREMENT_REVIEW")
+    third = fail_requirement_review(client, project_id)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 200
+    escalations = client.get(f"/api/projects/{project_id}/escalations")
+    assert escalations.status_code == 200
+    data = escalations.json()["data"]
+    assert len(data) == 1
+    assert data[0]["type"] == "review_failed_threshold"
+    assert data[0]["phase"] == "REQUIREMENT_REVIEW"
+    assert data[0]["retry_count"] == 3
+    assert data[0]["threshold"] == 3
+    assert data[0]["status"] == "pending_user_decision"

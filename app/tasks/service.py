@@ -93,8 +93,15 @@ def list_task_runs(database_path: str, task_id: str):
     return [_decode_task_run(row) for row in rows]
 
 
-def dispatch_pending_tasks(database_path: str, project_id: str, runner_type: str, workspace_strategy: str | None):
-    tasks = list_tasks(database_path, project_id, "pending", None, None)
+def dispatch_pending_tasks(
+    database_path: str,
+    project_id: str,
+    runner_type: str,
+    workspace_strategy: str | None,
+    phase: str | None = None,
+    owner_agent: str | None = None,
+):
+    tasks = list_tasks(database_path, project_id, "pending", phase, owner_agent)
     dispatched = []
     for task in tasks:
         run = start_task(database_path, task["id"], runner_type, workspace_strategy)

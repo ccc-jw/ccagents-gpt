@@ -21,7 +21,12 @@ def create_task(project_id: str, request_body: TaskCreateRequest, request: Reque
 def dispatch_pending_tasks(project_id: str, request_body: TaskDispatchRequest, request: Request):
     return success_response(
         service.dispatch_pending_tasks(
-            _database_path(request), project_id, request_body.runner_type, request_body.workspace_strategy
+            _database_path(request),
+            project_id,
+            request_body.runner_type,
+            request_body.workspace_strategy,
+            request_body.phase,
+            request_body.owner_agent,
         )
     )
 

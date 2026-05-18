@@ -197,3 +197,29 @@ def test_dispatch_pending_tasks_starts_project_tasks():
     assert second_runs[0]["status"] == "created"
     assert client.get(f"/api/tasks/{first_task_id}").json()["data"]["status"] == "running"
     assert client.get(f"/api/tasks/{second_task_id}").json()["data"]["status"] == "running"
+
+
+def test_dispatch_pending_tasks_filters_by_phase_and_owner_agent():
+    client = make_client()
+    project_id = create_project(client)
+    dev_task_id = create_task(client, project_id, title="实现登录接口", owner_agent="DEV").json()["data"]["id"]
+    test_task_id = create_task(client, project_id, title="编写测试用例", owner_agent="TEST").json()["data"]["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/tasks/dispatch-pending",
+        json={
+            "runner_type": "claude_code_cli",
+            "workspace_strategy": "git_worktree",
+            "phase": "DEVELOPMENT",
+            "owner_agent": "DEV",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["count"] == 1
+    assert data["dispatched"][0]["task_id"] == dev_task_id
+    assert data["dispatched"][0]["agent_name"] == "DEV"
+    assert client.get(f"/api/tasks/{dev_task_id}").json()["data"]["status"] == "running"
+    assert client.get(f"/api/tasks/{test_task_id}").json()["data"]["status"] == "pending"
+    assert client.get(f"/api/tasks/{test_task_id}/runs").json()["data"] == []

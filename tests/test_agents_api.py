@@ -71,6 +71,30 @@ def test_set_agent_enabled_updates_agent():
     assert detail.json()["data"]["enabled"] is False
 
 
+def test_update_agent_replaces_editable_fields():
+    client = make_client()
+    agent_id = create_agent(client, name="DEV", role="developer", enabled=True).json()["data"]["id"]
+
+    response = client.patch(
+        f"/api/agents/{agent_id}",
+        json={
+            "role": "senior_developer",
+            "description": "负责核心模块编码和疑难问题修复",
+            "enabled": False,
+            "model_config": {"model": "claude-sonnet-4-6", "timeout_seconds": 900},
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["id"] == agent_id
+    assert data["name"] == "DEV"
+    assert data["role"] == "senior_developer"
+    assert data["description"] == "负责核心模块编码和疑难问题修复"
+    assert data["enabled"] is False
+    assert data["model_config"] == {"model": "claude-sonnet-4-6", "timeout_seconds": 900}
+
+
 def test_get_agent_model_config_returns_redacted_resolved_config(tmp_path, monkeypatch):
     config_path = tmp_path / "app.yaml"
     config_path.write_text(

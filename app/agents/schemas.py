@@ -11,5 +11,12 @@ class AgentCreateRequest(BaseModel):
     model_overrides: dict[str, Any] = Field(default_factory=dict, alias="model_config")
 
 
+class AgentUpdateRequest(BaseModel):
+    role: str
+    description: str | None = None
+    enabled: bool
+    model_overrides: dict[str, Any] = Field(default_factory=dict, alias="model_config")
+
+
 class AgentEnabledRequest(BaseModel):
     enabled: bool

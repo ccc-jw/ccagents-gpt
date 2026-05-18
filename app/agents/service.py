@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from app.agents.schemas import AgentCreateRequest
+from app.agents.schemas import AgentCreateRequest, AgentUpdateRequest
 from app.core.config import load_config, resolve_model_config
 from app.core.database import get_connection
 
@@ -112,6 +112,27 @@ def set_agent_enabled(database_path: str, agent_id: str, enabled: bool):
         connection.execute(
             "UPDATE agents SET enabled = ?, updated_at = ? WHERE id = ?",
             (1 if enabled else 0, now, agent_id),
+        )
+    return get_agent(database_path, agent_id)
+
+
+def update_agent(database_path: str, agent_id: str, request: AgentUpdateRequest):
+    now = _now()
+    with get_connection(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE agents
+            SET role = ?, description = ?, enabled = ?, model_config_json = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                request.role,
+                request.description,
+                1 if request.enabled else 0,
+                json.dumps(request.model_overrides, ensure_ascii=False),
+                now,
+                agent_id,
+            ),
         )
     return get_agent(database_path, agent_id)
 

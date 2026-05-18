@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.agents import service
-from app.agents.schemas import AgentCreateRequest, AgentEnabledRequest
+from app.agents.schemas import AgentCreateRequest, AgentEnabledRequest, AgentUpdateRequest
 from app.core.responses import success_response
 
 router = APIRouter()
@@ -33,6 +33,11 @@ def bootstrap_default_agents(request: Request):
 @router.get("/api/agents/{agent_id}")
 def get_agent(agent_id: str, request: Request):
     return success_response(service.get_agent(_database_path(request), agent_id))
+
+
+@router.patch("/api/agents/{agent_id}")
+def update_agent(agent_id: str, request_body: AgentUpdateRequest, request: Request):
+    return success_response(service.update_agent(_database_path(request), agent_id, request_body))
 
 
 @router.post("/api/agents/{agent_id}/enabled")

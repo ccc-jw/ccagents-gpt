@@ -210,6 +210,32 @@ def test_escalation_decision_interactive_updates_escalation():
     assert data["escalation"]["decision_comment"] == "继续自动修复"
 
 
+def test_continue_escalation_decision_resumes_paused_project():
+    client = make_client()
+    project_id = create_project(client)
+    escalation_id = create_escalation(client, project_id)
+    post_event(client, f"/pause {project_id}")
+
+    response = client.post(
+        "/api/feishu/interactive",
+        json={
+            "action": "escalation_decision",
+            "user_id": "feishu_user_001",
+            "project_id": project_id,
+            "escalation_id": escalation_id,
+            "value": {"decision": "continue", "comment": "继续自动修复"},
+        },
+    )
+    status = client.get(f"/api/projects/{project_id}/status")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["handled"] is True
+    assert data["project_status"]["status"] == "active"
+    assert data["reply_text"] == "项目已根据升级决策继续。"
+    assert status.json()["data"]["status"] == "active"
+
+
 def test_cancel_escalation_decision_cancels_project():
     client = make_client()
     project_id = create_project(client)

@@ -87,14 +87,25 @@ def handle_interactive(database_path: str, request: FeishuInteractiveRequest):
                 EscalationDecisionRequest(decision=decision, comment=comment),
             )
             response["handled"] = True
-            if decision == "cancel" and request.project_id:
-                project_service.update_project_status(
-                    database_path,
-                    request.project_id,
-                    "cancelled",
-                    "project_cancelled",
-                    "飞书升级决策取消项目",
-                )
-                response["project_status"] = project_service.get_project_status(database_path, request.project_id)
-                response["reply_text"] = "项目已根据升级决策取消。"
+            if request.project_id and project_service.get_project(database_path, request.project_id):
+                if decision == "continue":
+                    project_service.update_project_status(
+                        database_path,
+                        request.project_id,
+                        "active",
+                        "project_resumed",
+                        "飞书升级决策继续项目",
+                    )
+                    response["project_status"] = project_service.get_project_status(database_path, request.project_id)
+                    response["reply_text"] = "项目已根据升级决策继续。"
+                if decision == "cancel":
+                    project_service.update_project_status(
+                        database_path,
+                        request.project_id,
+                        "cancelled",
+                        "project_cancelled",
+                        "飞书升级决策取消项目",
+                    )
+                    response["project_status"] = project_service.get_project_status(database_path, request.project_id)
+                    response["reply_text"] = "项目已根据升级决策取消。"
     return response

@@ -71,6 +71,21 @@ def get_project(database_path: str, project_id: str):
     return _row_to_dict(row)
 
 
+def list_projects(database_path: str, owner_user_id: str | None, status: str | None):
+    sql = "SELECT * FROM projects WHERE 1 = 1"
+    params = []
+    if owner_user_id:
+        sql += " AND owner_user_id = ?"
+        params.append(owner_user_id)
+    if status:
+        sql += " AND status = ?"
+        params.append(status)
+    sql += " ORDER BY created_at ASC"
+    with get_connection(database_path) as connection:
+        rows = connection.execute(sql, params).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
 def get_project_status(database_path: str, project_id: str):
     project = get_project(database_path, project_id)
     if project is None:

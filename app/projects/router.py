@@ -24,6 +24,11 @@ def create_project(request_body: ProjectCreateRequest, request: Request):
     )
 
 
+@router.get("/api/projects")
+def list_projects(request: Request, owner_user_id: str | None = None, status: str | None = None):
+    return success_response(service.list_projects(_database_path(request), owner_user_id, status))
+
+
 @router.get("/api/projects/{project_id}")
 def get_project(project_id: str, request: Request):
     return success_response(service.get_project(_database_path(request), project_id))

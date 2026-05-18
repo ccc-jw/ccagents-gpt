@@ -56,6 +56,32 @@ def test_get_project_returns_project_detail():
     assert "updated_at" in data
 
 
+def test_list_projects_filters_by_owner_and_status():
+    client = make_client()
+    first_id = create_project(client).json()["data"]["id"]
+    second_id = client.post(
+        "/api/projects",
+        json={
+            "name": "支付功能",
+            "description": "实现支付流程",
+            "owner_user_id": "feishu_user_002",
+            "repo_url": "https://github.com/example/app",
+            "default_branch": "main",
+            "initial_requirement": "需要实现支付功能",
+        },
+    ).json()["data"]["id"]
+    client.post(f"/api/projects/{second_id}/pause", json={"reason": "等待用户确认"})
+
+    all_projects = client.get("/api/projects")
+    filtered = client.get("/api/projects", params={"owner_user_id": "feishu_user_002", "status": "paused"})
+
+    assert all_projects.status_code == 200
+    assert {project["id"] for project in all_projects.json()["data"]} == {first_id, second_id}
+    assert filtered.status_code == 200
+    assert [project["id"] for project in filtered.json()["data"]] == [second_id]
+    assert filtered.json()["data"][0]["status"] == "paused"
+
+
 def test_project_status_lifecycle_actions():
     client = make_client()
     project_id = create_project(client).json()["data"]["id"]

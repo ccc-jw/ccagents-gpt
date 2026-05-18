@@ -2,7 +2,7 @@ from app.feishu.schemas import FeishuEventRequest, FeishuInteractiveRequest
 from app.projects import service as project_service
 
 
-SUPPORTED_COMMANDS = {"status", "pause", "resume", "help"}
+SUPPORTED_COMMANDS = {"status", "pause", "resume", "cancel", "help"}
 
 
 def parse_command(text: str | None):
@@ -50,6 +50,15 @@ def handle_event(database_path: str, request: FeishuEventRequest):
             project_service.update_project_status(database_path, args[0], "active", "project_resumed", "飞书命令恢复项目")
             response["project_status"] = project_service.get_project_status(database_path, args[0])
             response["reply_text"] = "项目已恢复。"
+        else:
+            response["reply_text"] = "项目不存在"
+    if command == "cancel" and args:
+        project = project_service.get_project(database_path, args[0])
+        response["handled"] = project is not None
+        if project:
+            project_service.update_project_status(database_path, args[0], "cancelled", "project_cancelled", "飞书命令取消项目")
+            response["project_status"] = project_service.get_project_status(database_path, args[0])
+            response["reply_text"] = "项目已取消。"
         else:
             response["reply_text"] = "项目不存在"
     return response

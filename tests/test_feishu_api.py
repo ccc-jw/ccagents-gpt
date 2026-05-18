@@ -112,12 +112,27 @@ def test_pause_and_resume_commands_update_project_status():
     assert resumed_status.json()["data"]["status"] == "active"
 
 
+def test_cancel_command_updates_project_status():
+    client = make_client()
+    project_id = create_project(client)
+
+    cancelled = post_event(client, f"/cancel {project_id}")
+    status = client.get(f"/api/projects/{project_id}/status")
+
+    assert cancelled.status_code == 200
+    assert cancelled.json()["data"]["handled"] is True
+    assert cancelled.json()["data"]["project_status"]["status"] == "cancelled"
+    assert cancelled.json()["data"]["reply_text"] == "项目已取消。"
+    assert status.json()["data"]["status"] == "cancelled"
+
+
 def test_parse_supported_feishu_slash_commands():
     client = make_client()
 
     help_response = post_event(client, "/help")
     pause_response = post_event(client, "/pause proj_001")
     resume_response = post_event(client, "/resume proj_001")
+    cancel_response = post_event(client, "/cancel proj_001")
 
     assert help_response.json()["data"]["command"] == "help"
     assert help_response.json()["data"]["args"] == []
@@ -125,6 +140,8 @@ def test_parse_supported_feishu_slash_commands():
     assert pause_response.json()["data"]["args"] == ["proj_001"]
     assert resume_response.json()["data"]["command"] == "resume"
     assert resume_response.json()["data"]["args"] == ["proj_001"]
+    assert cancel_response.json()["data"]["command"] == "cancel"
+    assert cancel_response.json()["data"]["args"] == ["proj_001"]
 
 
 def test_receive_feishu_interactive_acknowledges_action():

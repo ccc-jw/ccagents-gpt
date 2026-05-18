@@ -144,3 +144,55 @@ def test_reopened_issue_at_retry_threshold_creates_escalation():
     assert data[0]["source_agent"] == "DEV"
     assert data[0]["retry_count"] == 3
     assert data[0]["threshold"] == 3
+
+
+def test_create_issue_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = create_issue(client, project_id)
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "issue_created"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["issue_id"] == response.json()["data"]["id"]
+    assert payload["source"] == "test"
+    assert payload["phase"] == "TEST_AND_SECURITY_VALIDATION"
+    assert payload["title"] == "登录失败提示不符合预期"
+    assert payload["severity"] == "major"
+    assert payload["priority"] == "high"
+    assert payload["assigned_agent"] == "DEV"
+    assert payload["status"] == "open"
+
+
+def test_assign_issue_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    issue_id = create_issue(client, project_id, assigned_agent=None).json()["data"]["id"]
+
+    response = client.post(f"/api/issues/{issue_id}/assign", json={"assigned_agent": "DEV"})
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "issue_assigned"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["issue_id"] == issue_id
+    assert payload["assigned_agent"] == "DEV"
+    assert payload["status"] == "assigned"
+
+
+def test_update_issue_status_records_project_event():
+    client = make_client()
+    project_id = create_project(client)
+    issue_id = create_issue(client, project_id).json()["data"]["id"]
+
+    response = client.post(f"/api/issues/{issue_id}/status", json={"status": "fixed", "reason": "已修复"})
+    events = client.get(f"/api/projects/{project_id}/events", params={"event_type": "issue_status_updated"}).json()["data"]
+
+    assert response.status_code == 200
+    assert len(events) == 1
+    payload = events[0]["payload"]
+    assert payload["issue_id"] == issue_id
+    assert payload["status"] == "fixed"
+    assert payload["retry_count"] == 0

@@ -6,6 +6,7 @@ from app.core.database import get_connection
 from app.escalations import service as escalation_service
 from app.escalations.schemas import EscalationCreateRequest
 from app.issues.schemas import IssueCreateRequest
+from app.projects import service as project_service
 
 
 def _now():
@@ -19,6 +20,20 @@ def _decode_issue(row):
     data["related_artifacts"] = json.loads(data.pop("related_artifacts_json") or "[]")
     data["reproduce_steps"] = json.loads(data.pop("reproduce_steps_json") or "[]")
     return data
+
+
+def _issue_event_payload(issue):
+    return {
+        "issue_id": issue["id"],
+        "source": issue["source"],
+        "phase": issue["phase"],
+        "title": issue["title"],
+        "severity": issue["severity"],
+        "priority": issue["priority"],
+        "assigned_agent": issue["assigned_agent"],
+        "status": issue["status"],
+        "retry_count": issue["retry_count"],
+    }
 
 
 ESCALATION_OPTIONS = ["continue", "manual", "cancel", "change_requirement"]
@@ -56,7 +71,14 @@ def create_issue(database_path: str, project_id: str, request: IssueCreateReques
                 now,
             ),
         )
-    return get_issue(database_path, issue_id)
+    issue = get_issue(database_path, issue_id)
+    project_service.record_project_event(
+        database_path,
+        project_id,
+        "issue_created",
+        _issue_event_payload(issue),
+    )
+    return issue
 
 
 def get_issue(database_path: str, issue_id: str):
@@ -99,7 +121,14 @@ def assign_issue(database_path: str, issue_id: str, assigned_agent: str):
             "UPDATE issues SET assigned_agent = ?, status = 'assigned', updated_at = ? WHERE id = ?",
             (assigned_agent, now, issue_id),
         )
-    return get_issue(database_path, issue_id)
+    issue = get_issue(database_path, issue_id)
+    project_service.record_project_event(
+        database_path,
+        issue["project_id"],
+        "issue_assigned",
+        _issue_event_payload(issue),
+    )
+    return issue
 
 
 def _get_project_owner_user_id(connection, project_id: str):
@@ -142,6 +171,12 @@ def update_issue_status(database_path: str, issue_id: str, status: str):
                 (status, now, issue_id),
             )
     issue = get_issue(database_path, issue_id)
+    project_service.record_project_event(
+        database_path,
+        issue["project_id"],
+        "issue_status_updated",
+        _issue_event_payload(issue),
+    )
     if status == "reopened" and issue["retry_count"] == issue["max_retries"]:
         _create_issue_escalation(database_path, issue)
     return issue

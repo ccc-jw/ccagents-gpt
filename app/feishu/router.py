@@ -26,6 +26,16 @@ def get_project_status_notification(project_id: str, request: Request):
     return success_response(service.build_project_status_notification(_database_path(request), project_id))
 
 
+@router.post("/api/feishu/projects/{project_id}/status-notification/send")
+def send_project_status_notification(project_id: str, request: Request):
+    return success_response(service.send_project_status_notification(_database_path(request), project_id))
+
+
 @router.get("/api/feishu/escalations/{escalation_id}/notification")
 def get_escalation_notification(escalation_id: str, request: Request):
     return success_response(service.build_escalation_notification(_database_path(request), escalation_id))
+
+
+@router.post("/api/feishu/escalations/{escalation_id}/notification/send")
+def send_escalation_notification(escalation_id: str, request: Request):
+    return success_response(service.send_escalation_notification(_database_path(request), escalation_id))

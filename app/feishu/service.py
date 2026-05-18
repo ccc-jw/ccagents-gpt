@@ -1,3 +1,7 @@
+import os
+
+import httpx
+
 from app.escalations import service as escalation_service
 from app.escalations.schemas import EscalationDecisionRequest
 from app.feishu.schemas import FeishuEventRequest, FeishuInteractiveRequest
@@ -65,6 +69,24 @@ def build_escalation_notification(database_path: str, escalation_id: str):
             ],
         },
     }
+
+
+def send_project_status_notification(database_path: str, project_id: str):
+    payload = build_project_status_notification(database_path, project_id)
+    webhook_url = os.getenv("FEISHU_WEBHOOK_URL")
+    if not webhook_url:
+        return {"sent": False, "reason": "feishu_webhook_url_not_configured", "payload": payload}
+    response = httpx.post(webhook_url, json=payload, timeout=10)
+    return {"sent": True, "status_code": response.status_code, "payload": payload}
+
+
+def send_escalation_notification(database_path: str, escalation_id: str):
+    payload = build_escalation_notification(database_path, escalation_id)
+    webhook_url = os.getenv("FEISHU_WEBHOOK_URL")
+    if not webhook_url:
+        return {"sent": False, "reason": "feishu_webhook_url_not_configured", "payload": payload}
+    response = httpx.post(webhook_url, json=payload, timeout=10)
+    return {"sent": True, "status_code": response.status_code, "payload": payload}
 
 
 def handle_event(database_path: str, request: FeishuEventRequest):

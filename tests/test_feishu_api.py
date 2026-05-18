@@ -1,4 +1,6 @@
+import os
 import tempfile
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -335,6 +337,34 @@ def test_build_project_status_notification_payload():
     }
 
 
+def test_send_project_status_notification_requires_webhook_config():
+    client = make_client()
+    project_id = create_project(client)
+
+    response = client.post(f"/api/feishu/projects/{project_id}/status-notification/send")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data == {
+        "sent": False,
+        "reason": "feishu_webhook_url_not_configured",
+        "payload": {
+            "project_id": project_id,
+            "message_type": "interactive",
+            "card": {
+                "title": "项目状态更新：用户登录功能",
+                "content": "项目当前处于 INIT 阶段。",
+                "fields": [
+                    {"label": "阶段", "value": "INIT"},
+                    {"label": "状态", "value": "active"},
+                ],
+                "risks": [],
+                "pending_user_actions": [],
+            },
+        },
+    }
+
+
 def test_build_escalation_notification_payload():
     client = make_client()
     project_id = create_project(client)
@@ -356,6 +386,59 @@ def test_build_escalation_notification_payload():
                 {"label": "转人工处理", "value": {"decision": "manual"}},
                 {"label": "取消项目", "value": {"decision": "cancel"}},
             ],
+        },
+    }
+
+
+def test_send_project_status_notification_posts_webhook_without_exposing_url():
+    client = make_client()
+    project_id = create_project(client)
+
+    with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": "https://open.feishu.cn/webhook/secret-token"}):
+        with patch("app.feishu.service.httpx.post") as post:
+            post.return_value.status_code = 200
+            post.return_value.text = "ok"
+
+            response = client.post(f"/api/feishu/projects/{project_id}/status-notification/send")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["sent"] is True
+    assert data["status_code"] == 200
+    assert "webhook_url" not in data
+    assert "secret-token" not in str(data)
+    post.assert_called_once_with(
+        "https://open.feishu.cn/webhook/secret-token",
+        json=data["payload"],
+        timeout=10,
+    )
+
+
+def test_send_escalation_notification_requires_webhook_config():
+    client = make_client()
+    project_id = create_project(client)
+    escalation_id = create_escalation(client, project_id)
+
+    response = client.post(f"/api/feishu/escalations/{escalation_id}/notification/send")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data == {
+        "sent": False,
+        "reason": "feishu_webhook_url_not_configured",
+        "payload": {
+            "project_id": project_id,
+            "escalation_id": escalation_id,
+            "message_type": "interactive",
+            "card": {
+                "title": "需要用户决策：问题连续 3 次验证失败，需要用户决策。",
+                "content": "阶段：TEST_AND_SECURITY_VALIDATION；来源：PM；重试：3/3",
+                "actions": [
+                    {"label": "继续自动处理", "value": {"decision": "continue"}},
+                    {"label": "转人工处理", "value": {"decision": "manual"}},
+                    {"label": "取消项目", "value": {"decision": "cancel"}},
+                ],
+            },
         },
     }
 

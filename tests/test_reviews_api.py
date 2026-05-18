@@ -97,3 +97,109 @@ def test_add_review_comment_and_complete_review():
     assert completed.json()["data"]["status"] == "failed"
     assert completed.json()["data"]["conclusion"] == "failed"
     assert completed.json()["data"]["completed_at"] is not None
+
+
+def advance(client, project_id, from_phase, to_phase):
+    return client.post(
+        f"/api/projects/{project_id}/workflow/advance",
+        json={
+            "from_phase": from_phase,
+            "to_phase": to_phase,
+            "reason": "阶段推进",
+            "evidence": [],
+        },
+    )
+
+
+def advance_to_requirement_review(client, project_id):
+    advance(client, project_id, "INIT", "REQUIREMENT_DISCUSSION")
+    advance(client, project_id, "REQUIREMENT_DISCUSSION", "REQUIREMENT_REVIEW")
+
+
+def advance_to_design_review(client, project_id):
+    advance_to_requirement_review(client, project_id)
+    advance(client, project_id, "REQUIREMENT_REVIEW", "REQUIREMENT_APPROVED")
+    advance(client, project_id, "REQUIREMENT_APPROVED", "DESIGN_AND_TESTCASE_DRAFTING")
+    advance(client, project_id, "DESIGN_AND_TESTCASE_DRAFTING", "DESIGN_REVIEW")
+
+
+def create_review_with(client, project_id, review_type, phase):
+    return client.post(
+        f"/api/projects/{project_id}/reviews",
+        json={
+            "type": review_type,
+            "phase": phase,
+            "owner_agent": "ARCH",
+            "participants": ["PM", "PDM", "DEV", "TEST", "SEC"],
+            "input_artifacts": ["artifact_detail_design_draft"],
+        },
+    )
+
+
+def complete_review(client, review_id, conclusion):
+    return client.post(
+        f"/api/reviews/{review_id}/complete",
+        json={"conclusion": conclusion, "summary": "评审完成"},
+    )
+
+
+def test_evaluate_passed_design_review_advances_workflow_to_development():
+    client = make_client()
+    project_id = create_project(client)
+    advance_to_design_review(client, project_id)
+    review_id = create_review_with(client, project_id, "design_review", "DESIGN_REVIEW").json()["data"]["id"]
+    complete_review(client, review_id, "passed")
+
+    response = client.post(f"/api/reviews/{review_id}/evaluate-gate")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["review_id"] == review_id
+    assert data["project_id"] == project_id
+    assert data["from_phase"] == "DESIGN_REVIEW"
+    assert data["to_phase"] == "DEVELOPMENT"
+    assert data["conclusion"] == "passed"
+    assert data["workflow"]["current_phase"] == "DEVELOPMENT"
+    workflow = client.get(f"/api/projects/{project_id}/workflow")
+    assert workflow.json()["data"]["current_phase"] == "DEVELOPMENT"
+
+
+def test_evaluate_failed_requirement_review_rejects_to_revision():
+    client = make_client()
+    project_id = create_project(client)
+    advance_to_requirement_review(client, project_id)
+    review_id = create_review_with(client, project_id, "requirement_review", "REQUIREMENT_REVIEW").json()["data"]["id"]
+    complete_review(client, review_id, "failed")
+
+    response = client.post(f"/api/reviews/{review_id}/evaluate-gate")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["from_phase"] == "REQUIREMENT_REVIEW"
+    assert data["to_phase"] == "REQUIREMENT_REVISION"
+    assert data["conclusion"] == "failed"
+    assert data["workflow"]["current_phase"] == "REQUIREMENT_REVISION"
+
+
+def test_evaluate_open_review_returns_400():
+    client = make_client()
+    project_id = create_project(client)
+    advance_to_design_review(client, project_id)
+    review_id = create_review_with(client, project_id, "design_review", "DESIGN_REVIEW").json()["data"]["id"]
+
+    response = client.post(f"/api/reviews/{review_id}/evaluate-gate")
+
+    assert response.status_code == 400
+
+
+def test_evaluate_review_gate_rejects_phase_mismatch():
+    client = make_client()
+    project_id = create_project(client)
+    review_id = create_review_with(client, project_id, "design_review", "DESIGN_REVIEW").json()["data"]["id"]
+    complete_review(client, review_id, "passed")
+
+    response = client.post(f"/api/reviews/{review_id}/evaluate-gate")
+
+    assert response.status_code == 400
+    workflow = client.get(f"/api/projects/{project_id}/workflow")
+    assert workflow.json()["data"]["current_phase"] == "INIT"

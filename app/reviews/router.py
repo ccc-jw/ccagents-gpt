@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from app.core.responses import success_response
 from app.reviews import service
@@ -34,3 +34,11 @@ def add_review_comment(review_id: str, request_body: ReviewCommentRequest, reque
 @router.post("/api/reviews/{review_id}/complete")
 def complete_review(review_id: str, request_body: ReviewCompleteRequest, request: Request):
     return success_response(service.complete_review(_database_path(request), review_id, request_body))
+
+
+@router.post("/api/reviews/{review_id}/evaluate-gate")
+def evaluate_review_gate(review_id: str, request: Request):
+    try:
+        return success_response(service.evaluate_review_gate(_database_path(request), review_id))
+    except service.ReviewGateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

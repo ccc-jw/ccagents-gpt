@@ -284,3 +284,28 @@ def test_manual_escalation_decision_pauses_project():
     assert data["project_status"]["status"] == "paused"
     assert data["reply_text"] == "项目已根据升级决策暂停，等待人工处理。"
     assert status.json()["data"]["status"] == "paused"
+
+
+def test_change_requirement_escalation_decision_moves_project_to_requirement_revision():
+    client = make_client()
+    project_id = create_project(client)
+    escalation_id = create_escalation(client, project_id)
+
+    response = client.post(
+        "/api/feishu/interactive",
+        json={
+            "action": "escalation_decision",
+            "user_id": "feishu_user_001",
+            "project_id": project_id,
+            "escalation_id": escalation_id,
+            "value": {"decision": "change_requirement", "comment": "需要调整需求范围"},
+        },
+    )
+    status = client.get(f"/api/projects/{project_id}/status")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["handled"] is True
+    assert data["project_status"]["current_phase"] == "REQUIREMENT_REVISION"
+    assert data["reply_text"] == "项目已根据升级决策进入需求修订。"
+    assert status.json()["data"]["current_phase"] == "REQUIREMENT_REVISION"

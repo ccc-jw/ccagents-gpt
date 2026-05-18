@@ -108,6 +108,19 @@ def handle_interactive(database_path: str, request: FeishuInteractiveRequest):
                     )
                     response["project_status"] = project_service.get_project_status(database_path, request.project_id)
                     response["reply_text"] = "项目已根据升级决策暂停，等待人工处理。"
+                if decision == "change_requirement":
+                    project = project_service.get_project(database_path, request.project_id)
+                    project_service.update_project_phase(
+                        database_path,
+                        request.project_id,
+                        project["current_phase"],
+                        "REQUIREMENT_REVISION",
+                        "project_requirement_change_requested",
+                        "飞书升级决策变更需求",
+                        [],
+                    )
+                    response["project_status"] = project_service.get_project_status(database_path, request.project_id)
+                    response["reply_text"] = "项目已根据升级决策进入需求修订。"
                 if decision == "cancel":
                     project_service.update_project_status(
                         database_path,

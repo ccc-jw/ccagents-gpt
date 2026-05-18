@@ -259,3 +259,28 @@ def test_cancel_escalation_decision_cancels_project():
     assert data["project_status"]["status"] == "cancelled"
     assert data["reply_text"] == "项目已根据升级决策取消。"
     assert status.json()["data"]["status"] == "cancelled"
+
+
+def test_manual_escalation_decision_pauses_project():
+    client = make_client()
+    project_id = create_project(client)
+    escalation_id = create_escalation(client, project_id)
+
+    response = client.post(
+        "/api/feishu/interactive",
+        json={
+            "action": "escalation_decision",
+            "user_id": "feishu_user_001",
+            "project_id": project_id,
+            "escalation_id": escalation_id,
+            "value": {"decision": "manual", "comment": "转人工处理"},
+        },
+    )
+    status = client.get(f"/api/projects/{project_id}/status")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["handled"] is True
+    assert data["project_status"]["status"] == "paused"
+    assert data["reply_text"] == "项目已根据升级决策暂停，等待人工处理。"
+    assert status.json()["data"]["status"] == "paused"

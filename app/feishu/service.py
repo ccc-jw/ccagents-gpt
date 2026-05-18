@@ -98,6 +98,16 @@ def handle_interactive(database_path: str, request: FeishuInteractiveRequest):
                     )
                     response["project_status"] = project_service.get_project_status(database_path, request.project_id)
                     response["reply_text"] = "项目已根据升级决策继续。"
+                if decision == "manual":
+                    project_service.update_project_status(
+                        database_path,
+                        request.project_id,
+                        "paused",
+                        "project_paused",
+                        "飞书升级决策转人工处理",
+                    )
+                    response["project_status"] = project_service.get_project_status(database_path, request.project_id)
+                    response["reply_text"] = "项目已根据升级决策暂停，等待人工处理。"
                 if decision == "cancel":
                     project_service.update_project_status(
                         database_path,

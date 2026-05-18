@@ -1,4 +1,5 @@
 import tempfile
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -312,6 +313,68 @@ def test_cancelled_runner_task_run_records_project_event():
     assert payload["summary"] == "用户暂停项目"
     assert payload["error_type"] is None
     assert payload["error_message"] is None
+
+
+def test_execute_runner_task_run_marks_completed_and_records_output_paths():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    with patch("app.runners.executor.subprocess.run") as run:
+        run.return_value.returncode = 0
+        run.return_value.stdout = "自测通过\n"
+        run.return_value.stderr = ""
+        response = client.post(f"/api/runner/task-runs/{task_run_id}/execute")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "completed"
+    assert data["stdout_path"].endswith(f"logs/{task_run_id}.stdout.log")
+    assert data["stderr_path"].endswith(f"logs/{task_run_id}.stderr.log")
+    assert data["logs_path"].endswith(f"logs/{task_run_id}.log")
+    assert data["summary"] == "Runner execution completed"
+    assert data["result"] == {"exit_code": 0}
+    run.assert_called_once()
+    assert client.get(f"/api/tasks/{task_id}").json()["data"]["status"] == "completed"
+
+
+def test_execute_runner_task_run_marks_failed_on_nonzero_exit():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    with patch("app.runners.executor.subprocess.run") as run:
+        run.return_value.returncode = 2
+        run.return_value.stdout = ""
+        run.return_value.stderr = "测试失败\n"
+        response = client.post(f"/api/runner/task-runs/{task_run_id}/execute")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "failed"
+    assert data["summary"] == "Runner execution failed"
+    assert data["error_type"] == "process_exit"
+    assert data["error_message"] == "exit code 2"
+    assert data["result"] == {"exit_code": 2}
+    assert client.get(f"/api/tasks/{task_id}").json()["data"]["status"] == "failed"
+
+
+def test_execute_runner_task_run_does_not_expose_api_key_placeholder():
+    client = make_client()
+    project_id = create_project(client)
+    task_id = create_task(client, project_id)
+    task_run_id = create_runner_task_run(client, project_id, task_id).json()["data"]["task_run_id"]
+
+    with patch("app.runners.executor.subprocess.run") as run:
+        run.return_value.returncode = 0
+        run.return_value.stdout = "ok"
+        run.return_value.stderr = ""
+        response = client.post(f"/api/runner/task-runs/{task_run_id}/execute")
+
+    assert response.status_code == 200
+    assert "ANTHROPIC_API_KEY" not in str(response.json()["data"])
 
 
 def test_get_runner_task_run_execution_plan_returns_cli_command_and_paths():

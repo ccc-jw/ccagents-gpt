@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 
 from app.core.responses import success_response
-from app.runners import service
+from app.runners import executor, service
 from app.runners.schemas import TaskRunCancelRequest, TaskRunCreateRequest, TaskRunStatusUpdateRequest
 
 router = APIRouter()
@@ -39,3 +39,8 @@ def update_task_run_status(task_run_id: str, request_body: TaskRunStatusUpdateRe
 @router.post("/api/runner/task-runs/{task_run_id}/cancel")
 def cancel_task_run(task_run_id: str, request_body: TaskRunCancelRequest, request: Request):
     return success_response(service.cancel_task_run(_database_path(request), task_run_id, request_body.reason))
+
+
+@router.post("/api/runner/task-runs/{task_run_id}/execute")
+def execute_task_run(task_run_id: str, request: Request):
+    return success_response(executor.execute_task_run(_database_path(request), task_run_id))

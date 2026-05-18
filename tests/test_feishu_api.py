@@ -309,3 +309,48 @@ def test_change_requirement_escalation_decision_moves_project_to_requirement_rev
     assert data["project_status"]["current_phase"] == "REQUIREMENT_REVISION"
     assert data["reply_text"] == "项目已根据升级决策进入需求修订。"
     assert status.json()["data"]["current_phase"] == "REQUIREMENT_REVISION"
+
+
+def test_escalation_project_decisions_record_project_events():
+    client = make_client()
+    project_id = create_project(client)
+
+    decisions = [
+        ("continue", "project_resumed", "飞书升级决策继续项目"),
+        ("manual", "project_paused", "飞书升级决策转人工处理"),
+        ("cancel", "project_cancelled", "飞书升级决策取消项目"),
+    ]
+    for decision, _, _ in decisions:
+        escalation_id = create_escalation(client, project_id)
+        client.post(
+            "/api/feishu/interactive",
+            json={
+                "action": "escalation_decision",
+                "user_id": "feishu_user_001",
+                "project_id": project_id,
+                "escalation_id": escalation_id,
+                "value": {"decision": decision, "comment": decision},
+            },
+        )
+
+    workflow_escalation_id = create_escalation(client, project_id)
+    client.post(
+        "/api/feishu/interactive",
+        json={
+            "action": "escalation_decision",
+            "user_id": "feishu_user_001",
+            "project_id": project_id,
+            "escalation_id": workflow_escalation_id,
+            "value": {"decision": "change_requirement", "comment": "需要调整需求范围"},
+        },
+    )
+
+    response = client.get(f"/api/projects/{project_id}/events")
+
+    assert response.status_code == 200
+    events_by_type = {event["event_type"]: event for event in response.json()["data"]}
+    for _, event_type, reason in decisions:
+        assert events_by_type[event_type]["payload"] == {"reason": reason}
+    assert events_by_type["project_requirement_change_requested"]["payload"]["from_phase"] == "INIT"
+    assert events_by_type["project_requirement_change_requested"]["payload"]["to_phase"] == "REQUIREMENT_REVISION"
+    assert events_by_type["project_requirement_change_requested"]["payload"]["reason"] == "飞书升级决策变更需求"

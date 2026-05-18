@@ -13,6 +13,7 @@ from app.projects.router import router as projects_router
 from app.reviews.router import router as reviews_router
 from app.runners.router import router as runners_router
 from app.tasks.router import router as tasks_router
+from app.workers.router import router as workers_router
 from app.workflows.router import router as workflows_router
 
 
@@ -38,6 +39,7 @@ def create_app(database_path: str = "data/app.db", config_path: str | None = Non
     app.include_router(issues_router)
     app.include_router(messaging_router)
     app.include_router(runners_router)
+    app.include_router(workers_router)
     return app
 
 

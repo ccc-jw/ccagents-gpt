@@ -36,6 +36,25 @@ class ModelConfig:
 
 
 @dataclass
+class ResolvedModelConfig:
+    provider: str
+    base_url: str
+    api_key_env: str
+    api_key: str | None
+    model: str
+    temperature: float
+    max_tokens: int
+    timeout_seconds: int
+    max_retries: int
+
+    def public_dump(self) -> dict[str, Any]:
+        data = asdict(self)
+        if data.get("api_key"):
+            data["api_key"] = "***"
+        return data
+
+
+@dataclass
 class AppConfig:
     app: AppSettings = field(default_factory=AppSettings)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -71,3 +90,31 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         database.path = database_override
 
     return AppConfig(app=app, database=database, model=model)
+
+
+def _agent_config_keys(agent_name: str) -> list[str]:
+    normalized = agent_name.lower()
+    aliases = {
+        "pm": "project_manager",
+        "pdm": "product_manager",
+        "res": "researcher",
+        "researcher": "researcher",
+        "arch": "architect",
+        "dev": "developer",
+        "test": "tester",
+        "sec": "security",
+    }
+    keys = [normalized]
+    alias = aliases.get(normalized)
+    if alias and alias not in keys:
+        keys.append(alias)
+    return keys
+
+
+def resolve_model_config(config: AppConfig, agent_name: str) -> ResolvedModelConfig:
+    values = asdict(config.model.defaults)
+    for key in _agent_config_keys(agent_name):
+        values.update(config.model.agents.get(key, {}))
+    if not values.get("api_key") and values.get("api_key_env"):
+        values["api_key"] = os.getenv(values["api_key_env"])
+    return ResolvedModelConfig(**values)

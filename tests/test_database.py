@@ -34,6 +34,7 @@ def test_init_db_creates_mvp_tables_and_indexes(tmp_path):
         "issues",
         "escalations",
         "agent_messages",
+        "feishu_notifications",
     }.issubset(tables)
     assert {"idx_projects_status", "idx_tasks_project_id", "idx_task_runs_status"}.issubset(indexes)
 

@@ -236,6 +236,24 @@ CREATE INDEX IF NOT EXISTS idx_agent_messages_project_id ON agent_messages(proje
 CREATE INDEX IF NOT EXISTS idx_agent_messages_to_agent ON agent_messages(to_agent);
 CREATE INDEX IF NOT EXISTS idx_agent_messages_status ON agent_messages(status);
 CREATE INDEX IF NOT EXISTS idx_agent_messages_type ON agent_messages(message_type);
+
+CREATE TABLE IF NOT EXISTS feishu_notifications (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT,
+    webhook_status_code INTEGER,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_feishu_notifications_project_id ON feishu_notifications(project_id);
+CREATE INDEX IF NOT EXISTS idx_feishu_notifications_status ON feishu_notifications(status);
+CREATE INDEX IF NOT EXISTS idx_feishu_notifications_source ON feishu_notifications(source_type, source_id);
+
 """
 
 

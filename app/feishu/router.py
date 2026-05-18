@@ -21,6 +21,16 @@ def receive_interactive(request_body: FeishuInteractiveRequest, request: Request
     return success_response(service.handle_interactive(_database_path(request), request_body))
 
 
+@router.get("/api/projects/{project_id}/feishu-notifications")
+def list_feishu_notifications(project_id: str, request: Request):
+    return success_response(service.list_notifications(_database_path(request), project_id))
+
+
+@router.post("/api/feishu/notifications/{notification_id}/send")
+def send_feishu_notification(notification_id: str, request: Request):
+    return success_response(service.send_notification(_database_path(request), notification_id))
+
+
 @router.get("/api/feishu/projects/{project_id}/status-notification")
 def get_project_status_notification(project_id: str, request: Request):
     return success_response(service.build_project_status_notification(_database_path(request), project_id))

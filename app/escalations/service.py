@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from app.core.database import get_connection
 from app.escalations.schemas import EscalationCreateRequest, EscalationDecisionRequest
+from app.feishu import service as feishu_service
 from app.projects import service as project_service
 
 
@@ -68,6 +69,7 @@ def create_escalation(database_path: str, project_id: str, request: EscalationCr
         "escalation_created",
         _escalation_event_payload(escalation),
     )
+    feishu_service.create_escalation_notification(database_path, escalation_id)
     return escalation
 
 

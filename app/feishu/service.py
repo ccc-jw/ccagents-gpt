@@ -1,7 +1,11 @@
+import json
 import os
+from datetime import datetime, timezone
+from uuid import uuid4
 
 import httpx
 
+from app.core.database import get_connection
 from app.escalations import service as escalation_service
 from app.escalations.schemas import EscalationDecisionRequest
 from app.feishu.schemas import FeishuEventRequest, FeishuInteractiveRequest
@@ -16,6 +20,18 @@ ACTION_LABELS = {
     "change_requirement": "变更需求",
     "redesign": "重新设计",
 }
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _decode_notification(row):
+    if row is None:
+        return None
+    data = dict(row)
+    data["payload"] = json.loads(data.pop("payload_json") or "{}")
+    return data
 
 
 def parse_command(text: str | None):
@@ -69,6 +85,82 @@ def build_escalation_notification(database_path: str, escalation_id: str):
             ],
         },
     }
+
+
+def create_notification(database_path: str, project_id: str, source_type: str, source_id: str, payload: dict):
+    notification_id = f"fsn_{uuid4().hex}"
+    now = _now()
+    with get_connection(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO feishu_notifications (
+                id, project_id, source_type, source_id, status, payload_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+            """,
+            (notification_id, project_id, source_type, source_id, json.dumps(payload, ensure_ascii=False), now, now),
+        )
+    return get_notification(database_path, notification_id)
+
+
+def create_escalation_notification(database_path: str, escalation_id: str):
+    payload = build_escalation_notification(database_path, escalation_id)
+    if payload is None:
+        return None
+    return create_notification(database_path, payload["project_id"], "escalation", escalation_id, payload)
+
+
+def get_notification(database_path: str, notification_id: str):
+    with get_connection(database_path) as connection:
+        row = connection.execute("SELECT * FROM feishu_notifications WHERE id = ?", (notification_id,)).fetchone()
+    return _decode_notification(row)
+
+
+def list_notifications(database_path: str, project_id: str):
+    with get_connection(database_path) as connection:
+        rows = connection.execute(
+            "SELECT * FROM feishu_notifications WHERE project_id = ? ORDER BY created_at ASC",
+            (project_id,),
+        ).fetchall()
+    return [_decode_notification(row) for row in rows]
+
+
+def _update_notification_delivery(
+    database_path: str,
+    notification_id: str,
+    status: str,
+    reason: str | None,
+    webhook_status_code: int | None,
+):
+    with get_connection(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE feishu_notifications
+            SET status = ?, reason = ?, webhook_status_code = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (status, reason, webhook_status_code, _now(), notification_id),
+        )
+    return get_notification(database_path, notification_id)
+
+
+def send_notification(database_path: str, notification_id: str):
+    notification = get_notification(database_path, notification_id)
+    if notification is None:
+        return None
+    webhook_url = os.getenv("FEISHU_WEBHOOK_URL")
+    if not webhook_url:
+        _update_notification_delivery(
+            database_path,
+            notification_id,
+            "skipped",
+            "feishu_webhook_url_not_configured",
+            None,
+        )
+        return {"sent": False, "reason": "feishu_webhook_url_not_configured", "payload": notification["payload"]}
+    response = httpx.post(webhook_url, json=notification["payload"], timeout=10)
+    _update_notification_delivery(database_path, notification_id, "sent", None, response.status_code)
+    return {"sent": True, "status_code": response.status_code, "payload": notification["payload"]}
 
 
 def send_project_status_notification(database_path: str, project_id: str):

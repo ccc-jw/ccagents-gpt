@@ -414,6 +414,67 @@ def test_send_project_status_notification_posts_webhook_without_exposing_url():
     )
 
 
+def test_create_escalation_records_pending_feishu_notification():
+    client = make_client()
+    project_id = create_project(client)
+
+    escalation_id = create_escalation(client, project_id)
+    response = client.get(f"/api/projects/{project_id}/feishu-notifications")
+
+    assert response.status_code == 200
+    notifications = response.json()["data"]
+    assert len(notifications) == 1
+    notification = notifications[0]
+    assert notification["project_id"] == project_id
+    assert notification["source_type"] == "escalation"
+    assert notification["source_id"] == escalation_id
+    assert notification["status"] == "pending"
+    assert notification["reason"] is None
+    assert notification["webhook_status_code"] is None
+    assert notification["payload"]["escalation_id"] == escalation_id
+
+
+def test_send_pending_feishu_notification_without_webhook_records_skipped():
+    client = make_client()
+    project_id = create_project(client)
+    create_escalation(client, project_id)
+    notification_id = client.get(f"/api/projects/{project_id}/feishu-notifications").json()["data"][0]["id"]
+
+    response = client.post(f"/api/feishu/notifications/{notification_id}/send")
+    notification = client.get(f"/api/projects/{project_id}/feishu-notifications").json()["data"][0]
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["sent"] is False
+    assert data["reason"] == "feishu_webhook_url_not_configured"
+    assert notification["status"] == "skipped"
+    assert notification["reason"] == "feishu_webhook_url_not_configured"
+    assert notification["webhook_status_code"] is None
+
+
+def test_send_pending_feishu_notification_records_sent_without_exposing_webhook_secret():
+    client = make_client()
+    project_id = create_project(client)
+    create_escalation(client, project_id)
+    notification_id = client.get(f"/api/projects/{project_id}/feishu-notifications").json()["data"][0]["id"]
+
+    with patch.dict(os.environ, {"FEISHU_WEBHOOK_URL": "https://open.feishu.cn/webhook/secret-token"}):
+        with patch("app.feishu.service.httpx.post") as post:
+            post.return_value.status_code = 200
+            post.return_value.text = "ok"
+            response = client.post(f"/api/feishu/notifications/{notification_id}/send")
+
+    notification = client.get(f"/api/projects/{project_id}/feishu-notifications").json()["data"][0]
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["sent"] is True
+    assert data["status_code"] == 200
+    assert notification["status"] == "sent"
+    assert notification["webhook_status_code"] == 200
+    assert "secret-token" not in str(data)
+    assert "secret-token" not in str(notification)
+
+
 def test_send_escalation_notification_requires_webhook_config():
     client = make_client()
     project_id = create_project(client)
